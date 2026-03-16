@@ -4,8 +4,12 @@ use std::fmt;
 
 /// A reference extracted from a SIP Geolocation header (RFC 6442).
 ///
-/// Each entry is either a `cid:` reference to a multipart body part
+/// Each entry is either a `cid:` reference to a MIME body part
 /// (typically containing PIDF-LO XML) or a URL for location dereference.
+///
+/// This crate only parses the header references themselves. Resolving
+/// `cid:` references against the SIP message body (multipart MIME) or
+/// dereferencing HTTP URLs is the caller's responsibility.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SipGeolocationRef {
     /// Content-ID reference to a MIME body part (e.g., `cid:uuid`).
@@ -123,17 +127,7 @@ impl SipGeolocation {
 
 impl fmt::Display for SipGeolocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, r) in self
-            .0
-            .iter()
-            .enumerate()
-        {
-            if i > 0 {
-                f.write_str(", ")?;
-            }
-            write!(f, "{r}")?;
-        }
-        Ok(())
+        crate::fmt_joined(f, &self.0, ", ")
     }
 }
 

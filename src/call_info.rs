@@ -34,17 +34,6 @@ impl SipCallInfoEntry {
     pub fn purpose(&self) -> Option<&str> {
         self.param("purpose")
     }
-
-    /// Check if the `purpose` parameter ends with the given suffix
-    /// (case-insensitive). This is the standard way to match NENA purpose
-    /// values across namespace prefixes (`nena-CallId`, `emergency-CallId`).
-    pub fn purpose_ends_with(&self, suffix: &str) -> bool {
-        self.purpose()
-            .is_some_and(|p| {
-                p.to_ascii_lowercase()
-                    .ends_with(&suffix.to_ascii_lowercase())
-            })
-    }
 }
 
 impl fmt::Display for SipCallInfoEntry {
@@ -102,8 +91,8 @@ fn parse_entry(raw: &str) -> Result<SipCallInfoEntry, SipCallInfoError> {
         return Err(SipCallInfoError::MissingAngleBrackets(raw.to_string()));
     }
 
-    // Split on first ';' to separate data from metadata.
-    // This avoids issues with ';' inside URIs before the metadata section.
+    // Split on first ';' to separate the URI from parameters.
+    // This avoids issues with ';' inside URIs before the parameter section.
     let (data_part, metadata_part) = match raw.split_once(';') {
         Some((d, m)) => (d, Some(m)),
         None => (raw, None),
@@ -194,40 +183,11 @@ impl SipCallInfo {
         self.0
             .is_empty()
     }
-
-    /// Find the first entry whose `purpose` parameter ends with the given
-    /// suffix (case-insensitive).
-    pub fn find_by_purpose_suffix(&self, suffix: &str) -> Option<&SipCallInfoEntry> {
-        self.0
-            .iter()
-            .find(|e| e.purpose_ends_with(suffix))
-    }
-
-    /// Iterate over entries whose `purpose` parameter ends with the given
-    /// suffix (case-insensitive).
-    pub fn filter_by_purpose_suffix<'a>(
-        &'a self,
-        suffix: &'a str,
-    ) -> impl Iterator<Item = &'a SipCallInfoEntry> {
-        self.0
-            .iter()
-            .filter(move |e| e.purpose_ends_with(suffix))
-    }
 }
 
 impl fmt::Display for SipCallInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, entry) in self
-            .0
-            .iter()
-            .enumerate()
-        {
-            if i > 0 {
-                f.write_str(",")?;
-            }
-            write!(f, "{entry}")?;
-        }
-        Ok(())
+        crate::fmt_joined(f, &self.0, ",")
     }
 }
 
@@ -410,12 +370,13 @@ mod tests {
     fn full_fixture_nena_prefix_callid() {
         let info = SipCallInfo::parse(SAMPLE_FULL).unwrap();
         let entry = info
-            .find_by_purpose_suffix("-CallId")
+            .entries()
+            .iter()
+            .find(|e| e.purpose() == Some("nena-CallId"))
             .unwrap();
         assert!(entry
             .data
             .contains("callid"));
-        assert_eq!(entry.purpose(), Some("nena-CallId"));
     }
 
     #[test]
@@ -451,59 +412,51 @@ mod tests {
     }
 
     #[test]
-    fn find_by_purpose_suffix() {
+    fn find_by_purpose() {
         let info = SipCallInfo::parse(SAMPLE_EMERGENCY).unwrap();
 
         let call_id = info
-            .find_by_purpose_suffix("-CallId")
+            .entries()
+            .iter()
+            .find(|e| e.purpose() == Some("emergency-CallId"))
             .unwrap();
         assert!(call_id
             .data
             .contains("callid"));
 
         let incident = info
-            .find_by_purpose_suffix("-IncidentId")
+            .entries()
+            .iter()
+            .find(|e| e.purpose() == Some("emergency-IncidentId"))
             .unwrap();
         assert!(incident
             .data
             .contains("incidentid"));
-
-        assert!(info
-            .find_by_purpose_suffix("-Nonexistent")
-            .is_none());
     }
 
     #[test]
-    fn suffix_match_across_prefixes() {
+    fn param_lookup_by_purpose() {
         let legacy = "<urn:nena:callid:test:example.ca>;purpose=nena-CallId";
         let info = SipCallInfo::parse(legacy).unwrap();
-        assert!(info
-            .find_by_purpose_suffix("-CallId")
-            .is_some());
+        assert_eq!(info.entries()[0].purpose(), Some("nena-CallId"));
 
         let modern = "<urn:emergency:uid:callid:test:example.ca>;purpose=emergency-CallId";
         let info = SipCallInfo::parse(modern).unwrap();
-        assert!(info
-            .find_by_purpose_suffix("-CallId")
-            .is_some());
+        assert_eq!(info.entries()[0].purpose(), Some("emergency-CallId"));
     }
 
     #[test]
-    fn filter_multiple_matches() {
+    fn filter_entries_by_param() {
         let info = SipCallInfo::parse(SAMPLE_EMERGENCY).unwrap();
         let adr: Vec<_> = info
-            .filter_by_purpose_suffix("Info")
+            .entries()
+            .iter()
+            .filter(|e| {
+                e.purpose()
+                    .is_some_and(|p| p.ends_with("Info"))
+            })
             .collect();
         assert_eq!(adr.len(), 2);
-    }
-
-    #[test]
-    fn filter_all_adr_in_full_fixture() {
-        let info = SipCallInfo::parse(SAMPLE_FULL).unwrap();
-        let adr: Vec<_> = info
-            .filter_by_purpose_suffix("Info")
-            .collect();
-        assert_eq!(adr.len(), 4); // 2x ProviderInfo + ServiceInfo + SubscriberInfo
     }
 
     #[test]

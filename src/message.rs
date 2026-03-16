@@ -2,23 +2,78 @@
 //!
 //! Provides [`extract_header`] for pulling header values from raw SIP message
 //! text, handling case-insensitive name matching, header folding (continuation
-//! lines per RFC 3261 §7.3.1), and multi-occurrence concatenation.
-//!
-//! Compact header forms (RFC 3261 §7.3.3, e.g. `f` for `From`, `v` for `Via`)
-//! are not recognized — use the full header name.
+//! lines per RFC 3261 §7.3.1), multi-occurrence concatenation, and compact
+//! header forms (RFC 3261 §7.3.3).
+
+use crate::header::SipHeader;
+
+/// RFC 3261 §7.3.3 compact form equivalences.
+///
+/// Each pair is `(compact_char, canonical_name)`. Used by [`extract_header`]
+/// to match both compact and full header names transparently.
+const COMPACT_FORMS: &[(u8, &str)] = &[
+    (b'a', "Accept-Contact"),
+    (b'b', "Referred-By"),
+    (b'c', "Content-Type"),
+    (b'd', "Request-Disposition"),
+    (b'e', "Content-Encoding"),
+    (b'f', "From"),
+    (b'i', "Call-ID"),
+    (b'j', "Reject-Contact"),
+    (b'k', "Supported"),
+    (b'l', "Content-Length"),
+    (b'm', "Contact"),
+    (b'n', "Identity-Info"),
+    (b'o', "Event"),
+    (b'r', "Refer-To"),
+    (b's', "Subject"),
+    (b't', "To"),
+    (b'u', "Allow-Events"),
+    (b'v', "Via"),
+    (b'x', "Session-Expires"),
+    (b'y', "Identity"),
+];
+
+/// Check if a header name on the wire matches the target name, considering
+/// RFC 3261 §7.3.3 compact forms.
+fn matches_header_name(wire_name: &str, target: &str) -> bool {
+    if wire_name.eq_ignore_ascii_case(target) {
+        return true;
+    }
+    // Find the compact form equivalence for the target
+    let equiv = if target.len() == 1 {
+        let ch = target.as_bytes()[0].to_ascii_lowercase();
+        COMPACT_FORMS
+            .iter()
+            .find(|(c, _)| *c == ch)
+    } else {
+        COMPACT_FORMS
+            .iter()
+            .find(|(_, full)| full.eq_ignore_ascii_case(target))
+    };
+    if let Some(&(compact, full)) = equiv {
+        if wire_name.len() == 1 {
+            wire_name.as_bytes()[0].to_ascii_lowercase() == compact
+        } else {
+            wire_name.eq_ignore_ascii_case(full)
+        }
+    } else {
+        false
+    }
+}
 
 /// Extract a header value from a raw SIP message.
 ///
 /// Scans all lines up to the blank line separating headers from the message
-/// body. Header name matching is case-insensitive (RFC 3261 §7.3.5).
+/// body. Header name matching is case-insensitive (RFC 3261 §7.3.5) and
+/// recognizes compact header forms (RFC 3261 §7.3.3): searching for `"From"`
+/// also matches `f:`, and searching for `"f"` also matches `From:`.
 ///
 /// Header folding (continuation lines beginning with SP or HTAB) is unfolded
 /// into a single logical value. When a header appears multiple times, values
 /// are concatenated with `, ` (RFC 3261 §7.3.1).
 ///
 /// Returns `None` if no header with the given name is found.
-///
-/// Compact header forms (RFC 3261 §7.3.3) are not supported.
 pub fn extract_header(message: &str, name: &str) -> Option<String> {
     let mut values: Vec<String> = Vec::new();
     let mut current_match = false;
@@ -49,7 +104,7 @@ pub fn extract_header(message: &str, name: &str) -> Option<String> {
             // RFC 3261: header names are tokens — no whitespace allowed.
             // This rejects request/status lines like "INVITE sip:..." where
             // the text before the first colon contains spaces.
-            if !hdr_name.contains(' ') && hdr_name.eq_ignore_ascii_case(name) {
+            if !hdr_name.contains(' ') && matches_header_name(hdr_name, name) {
                 current_match = true;
                 values.push(
                     hdr_value
@@ -64,6 +119,17 @@ pub fn extract_header(message: &str, name: &str) -> Option<String> {
         None
     } else {
         Some(values.join(", "))
+    }
+}
+
+impl SipHeader {
+    /// Extract this header's value from a raw SIP message.
+    ///
+    /// Recognizes both the canonical header name and its compact form
+    /// (RFC 3261 §7.3.3). For example, `SipHeader::From.extract_from(msg)`
+    /// matches both `From:` and `f:` lines.
+    pub fn extract_from(&self, message: &str) -> Option<String> {
+        extract_header(message, self.as_str())
     }
 }
 
@@ -223,6 +289,75 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
         assert_eq!(extract_header(msg, "Subject"), Some("hello world".into()));
     }
 
+    // -- Compact form tests (RFC 3261 §7.3.3) --
+
+    #[test]
+    fn compact_form_from() {
+        let msg = "SIP/2.0 200 OK\r\nf: Alice <sip:alice@host>\r\n\r\n";
+        assert_eq!(
+            extract_header(msg, "From"),
+            Some("Alice <sip:alice@host>".into())
+        );
+        assert_eq!(
+            extract_header(msg, "f"),
+            Some("Alice <sip:alice@host>".into())
+        );
+    }
+
+    #[test]
+    fn compact_form_via() {
+        let msg = "SIP/2.0 200 OK\r\nv: SIP/2.0/UDP host\r\n\r\n";
+        assert_eq!(extract_header(msg, "Via"), Some("SIP/2.0/UDP host".into()));
+        assert_eq!(extract_header(msg, "v"), Some("SIP/2.0/UDP host".into()));
+    }
+
+    #[test]
+    fn compact_form_mixed_with_full() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "f: Alice <sip:alice@host>;tag=a\r\n",
+            "t: Bob <sip:bob@host>;tag=b\r\n",
+            "i: call-1@host\r\n",
+            "m: <sip:alice@192.0.2.1>\r\n",
+            "Content-Type: application/sdp\r\n",
+            "\r\n",
+        );
+        assert_eq!(
+            extract_header(msg, "From"),
+            Some("Alice <sip:alice@host>;tag=a".into())
+        );
+        assert_eq!(
+            extract_header(msg, "To"),
+            Some("Bob <sip:bob@host>;tag=b".into())
+        );
+        assert_eq!(extract_header(msg, "Call-ID"), Some("call-1@host".into()));
+        assert_eq!(
+            extract_header(msg, "Contact"),
+            Some("<sip:alice@192.0.2.1>".into())
+        );
+        assert_eq!(
+            extract_header(msg, "Content-Type"),
+            Some("application/sdp".into())
+        );
+        assert_eq!(extract_header(msg, "c"), Some("application/sdp".into()));
+    }
+
+    #[test]
+    fn compact_form_case_insensitive() {
+        let msg = "SIP/2.0 200 OK\r\nF: Alice <sip:alice@host>\r\n\r\n";
+        assert_eq!(
+            extract_header(msg, "From"),
+            Some("Alice <sip:alice@host>".into())
+        );
+    }
+
+    #[test]
+    fn compact_form_unknown_single_char() {
+        let msg = "SIP/2.0 200 OK\r\nz: something\r\n\r\n";
+        assert_eq!(extract_header(msg, "z"), Some("something".into()));
+        assert_eq!(extract_header(msg, "From"), None);
+    }
+
     // -- Integration pipeline tests: extract_header → existing parsers --
 
     const NG911_INVITE: &str = concat!(
@@ -249,8 +384,9 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
         assert_eq!(ci.len(), 2);
         assert_eq!(ci.entries()[0].purpose(), Some("emergency-CallId"));
         assert!(ci
-            .find_by_purpose_suffix("ServiceInfo")
-            .is_some());
+            .entries()
+            .iter()
+            .any(|e| e.purpose() == Some("EmergencyCallData.ServiceInfo")));
     }
 
     #[test]

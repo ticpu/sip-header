@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "pii-organization"
+description = "Organization-specific identifiers must not appear in source"
+regex = '''(?i)\b(cauca|911bell|c911p)\b'''

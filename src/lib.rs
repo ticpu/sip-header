@@ -36,7 +36,29 @@ pub use header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 pub use history_info::{HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason};
 pub use message::extract_header;
 
-/// Split comma-separated entries respecting angle-bracket nesting.
+/// Format a slice of displayable items as a separated list.
+pub(crate) fn fmt_joined<T: std::fmt::Display>(
+    f: &mut std::fmt::Formatter<'_>,
+    items: &[T],
+    separator: &str,
+) -> std::fmt::Result {
+    for (i, item) in items
+        .iter()
+        .enumerate()
+    {
+        if i > 0 {
+            f.write_str(separator)?;
+        }
+        write!(f, "{item}")?;
+    }
+    Ok(())
+}
+
+/// Split comma-separated header entries respecting angle-bracket nesting.
+///
+/// SIP headers that carry lists (RFC 3261 §7.3.1) use commas as delimiters,
+/// but commas may also appear inside angle-bracketed URIs. This function
+/// splits only on commas at bracket depth zero.
 pub(crate) fn split_comma_entries(raw: &str) -> Vec<&str> {
     let mut entries = Vec::new();
     let mut depth = 0u32;

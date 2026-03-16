@@ -299,13 +299,64 @@ define_header_enum! {
     }
 }
 
+/// RFC 3261 §7.3.3 compact header form mappings.
+///
+/// Includes forms from RFC 3261, RFC 3515, RFC 3841, RFC 3892, RFC 4028,
+/// RFC 4474, and RFC 6665.
+const COMPACT_FORMS: &[(u8, SipHeader)] = &[
+    (b'a', SipHeader::AcceptContact),
+    (b'b', SipHeader::ReferredBy),
+    (b'c', SipHeader::ContentType),
+    (b'd', SipHeader::RequestDisposition),
+    (b'e', SipHeader::ContentEncoding),
+    (b'f', SipHeader::From),
+    (b'i', SipHeader::CallId),
+    (b'j', SipHeader::RejectContact),
+    (b'k', SipHeader::Supported),
+    (b'l', SipHeader::ContentLength),
+    (b'm', SipHeader::Contact),
+    (b'n', SipHeader::IdentityInfo),
+    (b'o', SipHeader::Event),
+    (b'r', SipHeader::ReferTo),
+    (b's', SipHeader::Subject),
+    (b't', SipHeader::To),
+    (b'u', SipHeader::AllowEvents),
+    (b'v', SipHeader::Via),
+    (b'x', SipHeader::SessionExpires),
+    (b'y', SipHeader::Identity),
+];
+
 impl SipHeader {
-    /// Extract this header's value from a raw SIP message.
+    /// Resolve a compact form letter to the corresponding header (RFC 3261 §7.3.3).
     ///
-    /// Delegates to [`extract_header`](crate::message::extract_header)
-    /// using the canonical wire name from [`as_str()`](Self::as_str).
-    pub fn extract_from(&self, message: &str) -> Option<String> {
-        crate::message::extract_header(message, self.as_str())
+    /// Case-insensitive: both `'f'` and `'F'` resolve to [`SipHeader::From`].
+    pub fn from_compact(ch: u8) -> Option<Self> {
+        let lower = ch.to_ascii_lowercase();
+        COMPACT_FORMS
+            .iter()
+            .find(|(c, _)| *c == lower)
+            .map(|(_, h)| *h)
+    }
+
+    /// Return the compact form letter for this header, if one exists.
+    pub fn compact_form(&self) -> Option<char> {
+        COMPACT_FORMS
+            .iter()
+            .find(|(_, h)| h == self)
+            .map(|(c, _)| *c as char)
+    }
+
+    /// Parse a header name, including RFC 3261 §7.3.3 compact forms.
+    ///
+    /// Tries compact form resolution for single-character input, then
+    /// falls back to case-insensitive canonical name matching.
+    pub fn parse_name(name: &str) -> Result<Self, ParseSipHeaderError> {
+        if name.len() == 1 {
+            if let Some(h) = Self::from_compact(name.as_bytes()[0]) {
+                return Ok(h);
+            }
+        }
+        name.parse()
     }
 }
 
@@ -335,7 +386,7 @@ impl SipHeader {
 /// assert_eq!(ci.entries()[0].purpose(), Some("emergency-CallId"));
 /// ```
 pub trait SipHeaderLookup {
-    /// Look up a SIP header by its raw wire name (e.g. `"Call-Info"`).
+    /// Look up a SIP header by its canonical name (e.g. `"Call-Info"`).
     fn sip_header_str(&self, name: &str) -> Option<&str>;
 
     /// Look up a SIP header by its [`SipHeader`] enum variant.
@@ -770,6 +821,99 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+}
+
+#[cfg(test)]
+mod compact_form_tests {
+    use super::*;
+
+    #[test]
+    fn from_compact_known() {
+        assert_eq!(SipHeader::from_compact(b'f'), Some(SipHeader::From));
+        assert_eq!(SipHeader::from_compact(b'F'), Some(SipHeader::From));
+        assert_eq!(SipHeader::from_compact(b'v'), Some(SipHeader::Via));
+        assert_eq!(SipHeader::from_compact(b'i'), Some(SipHeader::CallId));
+        assert_eq!(SipHeader::from_compact(b'm'), Some(SipHeader::Contact));
+        assert_eq!(SipHeader::from_compact(b't'), Some(SipHeader::To));
+        assert_eq!(SipHeader::from_compact(b'c'), Some(SipHeader::ContentType));
+    }
+
+    #[test]
+    fn from_compact_unknown() {
+        assert_eq!(SipHeader::from_compact(b'z'), None);
+        assert_eq!(SipHeader::from_compact(b'g'), None);
+    }
+
+    #[test]
+    fn compact_form_roundtrip() {
+        assert_eq!(SipHeader::From.compact_form(), Some('f'));
+        assert_eq!(SipHeader::Via.compact_form(), Some('v'));
+        assert_eq!(SipHeader::CallId.compact_form(), Some('i'));
+        assert_eq!(SipHeader::Contact.compact_form(), Some('m'));
+    }
+
+    #[test]
+    fn compact_form_absent() {
+        assert_eq!(SipHeader::HistoryInfo.compact_form(), None);
+        assert_eq!(SipHeader::PAssertedIdentity.compact_form(), None);
+    }
+
+    #[test]
+    fn parse_name_compact() {
+        assert_eq!(SipHeader::parse_name("f"), Ok(SipHeader::From));
+        assert_eq!(SipHeader::parse_name("F"), Ok(SipHeader::From));
+        assert_eq!(SipHeader::parse_name("v"), Ok(SipHeader::Via));
+    }
+
+    #[test]
+    fn parse_name_full() {
+        assert_eq!(SipHeader::parse_name("From"), Ok(SipHeader::From));
+        assert_eq!(SipHeader::parse_name("Via"), Ok(SipHeader::Via));
+    }
+
+    #[test]
+    fn parse_name_unknown() {
+        assert!(SipHeader::parse_name("X-Custom").is_err());
+    }
+
+    #[test]
+    fn all_compact_forms_resolve() {
+        let expected = [
+            ('a', SipHeader::AcceptContact),
+            ('b', SipHeader::ReferredBy),
+            ('c', SipHeader::ContentType),
+            ('d', SipHeader::RequestDisposition),
+            ('e', SipHeader::ContentEncoding),
+            ('f', SipHeader::From),
+            ('i', SipHeader::CallId),
+            ('j', SipHeader::RejectContact),
+            ('k', SipHeader::Supported),
+            ('l', SipHeader::ContentLength),
+            ('m', SipHeader::Contact),
+            ('n', SipHeader::IdentityInfo),
+            ('o', SipHeader::Event),
+            ('r', SipHeader::ReferTo),
+            ('s', SipHeader::Subject),
+            ('t', SipHeader::To),
+            ('u', SipHeader::AllowEvents),
+            ('v', SipHeader::Via),
+            ('x', SipHeader::SessionExpires),
+            ('y', SipHeader::Identity),
+        ];
+        for (ch, header) in expected {
+            assert_eq!(
+                SipHeader::from_compact(ch as u8),
+                Some(header),
+                "compact form '{ch}' failed"
+            );
+            assert_eq!(
+                header.compact_form(),
+                Some(ch),
+                "compact_form() for {} failed",
+                header
+            );
+        }
     }
 }
 

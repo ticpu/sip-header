@@ -1,4 +1,4 @@
-/// Generates a non-exhaustive enum mapping Rust variants to wire-format strings.
+/// Generates a non-exhaustive enum mapping Rust variants to canonical protocol strings.
 ///
 /// Produces: enum definition + `as_str()` + `Display` + `AsRef<str>` + `FromStr`.
 /// `FromStr` uses `eq_ignore_ascii_case` — appropriate for user-facing catalog
@@ -44,7 +44,7 @@ macro_rules! define_header_enum {
         }
 
         impl $Name {
-            /// Wire-format name string.
+            /// Canonical protocol string.
             pub fn as_str(&self) -> &'static str {
                 match self {
                     $( $Name::$variant => $wire, )+

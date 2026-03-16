@@ -267,17 +267,7 @@ fn parse_entry(raw: &str) -> Result<HistoryInfoEntry, HistoryInfoError> {
 
 impl fmt::Display for HistoryInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, entry) in self
-            .0
-            .iter()
-            .enumerate()
-        {
-            if i > 0 {
-                f.write_str(",")?;
-            }
-            write!(f, "{entry}")?;
-        }
-        Ok(())
+        crate::fmt_joined(f, &self.0, ",")
     }
 }
 
@@ -304,8 +294,6 @@ impl IntoIterator for HistoryInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // -- NG9-1-1 routing chain examples --
 
     const EXAMPLE_1: &str = "\
 <sip:user1@esrp.example.com?Reason=RouteAction%3Bcause%3D200%3Btext%3D%22Normal+Next+Hop%22>;index=1,\
@@ -379,7 +367,7 @@ mod tests {
         assert_eq!(
             sip.host()
                 .to_string(),
-            "esrp.qc.core.ng.example.com"
+            "esrp.example.com"
         );
     }
 
@@ -407,7 +395,7 @@ mod tests {
         assert_eq!(
             sip.host()
                 .to_string(),
-            "esrp.mb.core.ng.example.com"
+            "esrp2.example.com"
         );
         assert!(sip
             .param("lr")

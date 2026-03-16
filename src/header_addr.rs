@@ -28,10 +28,9 @@ use percent_encoding::percent_decode_str;
 /// This type handles the full production including those trailing
 /// parameters (`;tag=`, `;expires=`, `;serviceurn=`, etc.).
 ///
-/// Replaces [`sip_uri::NameAddr`] which was deprecated in sip-uri 0.2.0
-/// because it only parsed the `name-addr` portion and rejected header-level
-/// parameters after `>`, making it unable to round-trip real SIP header
-/// values.
+/// Unlike [`sip_uri::NameAddr`] (which only handles the `name-addr` portion),
+/// this type also parses header-level parameters after `>` and can
+/// round-trip real SIP header values.
 ///
 /// ```
 /// use sip_header::SipHeaderAddr;
@@ -133,7 +132,7 @@ impl SipHeaderAddr {
     }
 
     /// Iterator over header-level parameters as `(key, raw_value)` pairs.
-    /// Keys are lowercased; values are raw percent-encoded wire format.
+    /// Keys are lowercased; values retain their original percent-encoding.
     pub fn params(&self) -> impl Iterator<Item = (&str, Option<&str>)> {
         self.params
             .iter()
@@ -163,8 +162,8 @@ impl SipHeaderAddr {
 
     /// Look up a raw percent-encoded parameter value (case-insensitive).
     ///
-    /// Returns the wire-format value without percent-decoding. Use this
-    /// for non-UTF-8 values or when round-trip fidelity matters.
+    /// Returns the raw value without percent-decoding. Use this when
+    /// round-trip fidelity matters or the value may not be valid UTF-8.
     pub fn param_raw(&self, name: &str) -> Option<Option<&str>> {
         let needle = name.to_ascii_lowercase();
         self.params

@@ -87,6 +87,21 @@ the [IANA SIP Parameters](https://www.iana.org/assignments/sip-parameters/sip-pa
 registry. Use it for typed lookups, or fall back to `sip_header_str()`
 for unregistered headers.
 
+### Compact header forms (RFC 3261 §7.3.3)
+
+All 20 IANA-registered compact forms are supported:
+
+```rust
+use sip_header::SipHeader;
+
+assert_eq!(SipHeader::from_compact(b'f'), Some(SipHeader::From));
+assert_eq!(SipHeader::From.compact_form(), Some('f'));
+assert_eq!(SipHeader::parse_name("v"), Ok(SipHeader::Via));
+```
+
+`extract_header()` matches both forms transparently — searching for
+`"From"` also matches `f:` lines, and vice versa.
+
 ## Modules
 
 | Module | Description |

@@ -1,0 +1,29 @@
+[package]
+name = "sip-header"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
+description = "SIP header field parsers: RFC 3261 name-addr, Call-Info, History-Info (RFC 7044), Geolocation (RFC 6442), conference-info (RFC 4575)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ticpu/sip-header"
+documentation = "https://docs.rs/sip-header"
+readme = "README.md"
+keywords = ["sip", "header", "voip", "rfc3261", "parser"]
+categories = ["parser-implementations", "network-programming"]
+exclude = ["CLAUDE.md", "hooks/"]
+
+[features]
+default = []
+serde = ["dep:serde"]
+conference-info = ["dep:quick-xml", "serde"]
+
+[dependencies]
+sip-uri = "0.2"
+percent-encoding = "2"
+serde = { version = "1.0", features = ["derive"], optional = true }
+quick-xml = { version = "0.39", features = ["serialize"], optional = true }
+
+[dev-dependencies]
+serde_json = "1.0"
+quick-xml = { version = "0.39", features = ["serialize"] }

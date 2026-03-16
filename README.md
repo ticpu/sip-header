@@ -7,6 +7,9 @@ History-Info (RFC 7044), Geolocation (RFC 6442), and conference-info
 [![CI](https://github.com/ticpu/sip-header/actions/workflows/ci.yml/badge.svg)](https://github.com/ticpu/sip-header/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/sip-header.svg)](https://crates.io/crates/sip-header)
 [![docs.rs](https://docs.rs/sip-header/badge.svg)](https://docs.rs/sip-header)
+![tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/9f50aa47ea72d91eb2033a1c48f40246/raw/test-count.json)
+![SipHeader](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/9f50aa47ea72d91eb2033a1c48f40246/raw/sip-header-count.json)
+![SipHeaderLookup](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/9f50aa47ea72d91eb2033a1c48f40246/raw/lookup-count.json)
 
 Sits between URI parsing ([sip-uri](https://crates.io/crates/sip-uri))
 and full SIP stacks, handling the header-level grammar: display names,

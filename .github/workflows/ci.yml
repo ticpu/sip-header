@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Check (no features)
+      run: cargo check --all-targets
+
+    - name: Check (serde)
+      run: cargo check --features serde --all-targets
+
+    - name: Check (conference-info)
+      run: cargo check --features conference-info --all-targets
+
+    - name: Clippy
+      run: cargo clippy --all-targets -- -D warnings
+
+    - name: Verify SipHeader against IANA registry
+      run: |
+        SIP_HEADER_COUNT=$(hooks/check-sip-headers.sh 2>&1 | tail -1 | grep -oP '\d+/\d+')
+        echo "SIP_HEADER_COUNT=${SIP_HEADER_COUNT}" >> "$GITHUB_ENV"
+
+    - name: Count SipHeaderLookup accessors
+      run: |
+        echo "LOOKUP_COUNT=$(sed -n '/^pub trait SipHeaderLookup/,/^}/p' src/header.rs | grep -c '^ *fn ')" >> "$GITHUB_ENV"
+
+    - name: Test
+      run: |
+        set -o pipefail
+        CARGO_TERM_COLOR=never cargo test 2>&1 | tee test-output.txt
+        passed=$(grep '^test result:' test-output.txt | sed 's/.*ok\. \([0-9]*\) passed.*/\1/' | paste -sd+ | bc)
+        echo "TEST_PASSED=$passed" >> "$GITHUB_ENV"
+
+    - name: Update test count badge
+      if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 9f50aa47ea72d91eb2033a1c48f40246
+        filename: test-count.json
+        label: tests
+        message: "${{ env.TEST_PASSED }} passed"
+        color: brightgreen
+
+    - name: Update SipHeader IANA sync badge
+      if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 9f50aa47ea72d91eb2033a1c48f40246
+        filename: sip-header-count.json
+        label: SipHeader (IANA)
+        message: "${{ env.SIP_HEADER_COUNT }}"
+        color: blue
+
+    - name: Update SipHeaderLookup accessor badge
+      if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 9f50aa47ea72d91eb2033a1c48f40246
+        filename: lookup-count.json
+        label: SipHeaderLookup
+        message: "${{ env.LOOKUP_COUNT }} accessors"
+        color: blue
+
+    - name: Build
+      run: cargo build --release

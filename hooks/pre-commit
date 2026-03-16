@@ -3,6 +3,8 @@
 
 set -e
 
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+
 echo "Running cargo fmt check..."
 if ! cargo fmt --all -- --check; then
     echo "Code is not formatted. Run 'cargo fmt --all' to fix."
@@ -26,6 +28,12 @@ echo "Running tests..."
 if ! test_output=$(cargo test 2>&1); then
     echo "$test_output" | tail
     echo "Tests failed. Fix them before committing."
+    exit 1
+fi
+
+echo "Checking SipHeader against IANA registry..."
+if ! "$SCRIPT_DIR/check-sip-headers.sh"; then
+    echo "SipHeader enum is out of sync with IANA registry. Update src/header.rs."
     exit 1
 fi
 

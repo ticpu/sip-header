@@ -17,7 +17,7 @@ header parameters, and structured header values.
 
 ```toml
 [dependencies]
-sip-header = "0.1"
+sip-header = "0"
 ```
 
 ## SipHeaderAddr — RFC 3261 name-addr

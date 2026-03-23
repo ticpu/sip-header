@@ -346,6 +346,55 @@ impl SipHeader {
             .map(|(c, _)| *c as char)
     }
 
+    /// Whether this header may appear multiple times in a SIP message.
+    ///
+    /// Headers listed here use comma-separated or repeated-header semantics
+    /// per RFC 3261 §7.3.1 and their defining RFCs.
+    pub fn is_multi_valued(&self) -> bool {
+        matches!(
+            self,
+            // RFC 3261 core
+            Self::Via
+                | Self::Route
+                | Self::RecordRoute
+                | Self::Contact
+                | Self::Allow
+                | Self::Supported
+                | Self::Require
+                | Self::ProxyRequire
+                | Self::Unsupported
+                | Self::Authorization
+                | Self::ProxyAuthorization
+                | Self::WwwAuthenticate
+                | Self::ProxyAuthenticate
+                | Self::Warning
+                | Self::ErrorInfo
+                | Self::CallInfo
+                | Self::AlertInfo
+                | Self::Accept
+                | Self::AcceptEncoding
+                | Self::AcceptLanguage
+                | Self::ContentEncoding
+                | Self::ContentLanguage
+                | Self::InReplyTo
+                // RFC 3325
+                | Self::PAssertedIdentity
+                | Self::PPreferredIdentity
+                // RFC 6665
+                | Self::AllowEvents
+                // RFC 3329
+                | Self::SecurityClient
+                | Self::SecurityServer
+                | Self::SecurityVerify
+                // RFC 3327
+                | Self::Path
+                // RFC 3608
+                | Self::ServiceRoute
+                // RFC 7044
+                | Self::HistoryInfo
+        )
+    }
+
     /// Parse a header name, including RFC 3261 §7.3.3 compact forms.
     ///
     /// Tries compact form resolution for single-character input, then
@@ -914,6 +963,68 @@ mod compact_form_tests {
                 header
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod multi_valued_tests {
+    use super::*;
+
+    #[test]
+    fn rfc3261_multi_valued_headers() {
+        assert!(SipHeader::Via.is_multi_valued());
+        assert!(SipHeader::Route.is_multi_valued());
+        assert!(SipHeader::RecordRoute.is_multi_valued());
+        assert!(SipHeader::Contact.is_multi_valued());
+        assert!(SipHeader::Allow.is_multi_valued());
+        assert!(SipHeader::Supported.is_multi_valued());
+        assert!(SipHeader::Require.is_multi_valued());
+        assert!(SipHeader::ProxyRequire.is_multi_valued());
+        assert!(SipHeader::Unsupported.is_multi_valued());
+        assert!(SipHeader::Authorization.is_multi_valued());
+        assert!(SipHeader::ProxyAuthorization.is_multi_valued());
+        assert!(SipHeader::WwwAuthenticate.is_multi_valued());
+        assert!(SipHeader::ProxyAuthenticate.is_multi_valued());
+        assert!(SipHeader::Warning.is_multi_valued());
+        assert!(SipHeader::ErrorInfo.is_multi_valued());
+        assert!(SipHeader::CallInfo.is_multi_valued());
+        assert!(SipHeader::AlertInfo.is_multi_valued());
+        assert!(SipHeader::Accept.is_multi_valued());
+        assert!(SipHeader::AcceptEncoding.is_multi_valued());
+        assert!(SipHeader::AcceptLanguage.is_multi_valued());
+        assert!(SipHeader::ContentEncoding.is_multi_valued());
+        assert!(SipHeader::ContentLanguage.is_multi_valued());
+        assert!(SipHeader::InReplyTo.is_multi_valued());
+    }
+
+    #[test]
+    fn extension_multi_valued_headers() {
+        assert!(SipHeader::PAssertedIdentity.is_multi_valued());
+        assert!(SipHeader::PPreferredIdentity.is_multi_valued());
+        assert!(SipHeader::AllowEvents.is_multi_valued());
+        assert!(SipHeader::SecurityClient.is_multi_valued());
+        assert!(SipHeader::SecurityServer.is_multi_valued());
+        assert!(SipHeader::SecurityVerify.is_multi_valued());
+        assert!(SipHeader::Path.is_multi_valued());
+        assert!(SipHeader::ServiceRoute.is_multi_valued());
+        assert!(SipHeader::HistoryInfo.is_multi_valued());
+    }
+
+    #[test]
+    fn single_valued_headers() {
+        assert!(!SipHeader::From.is_multi_valued());
+        assert!(!SipHeader::To.is_multi_valued());
+        assert!(!SipHeader::CallId.is_multi_valued());
+        assert!(!SipHeader::Cseq.is_multi_valued());
+        assert!(!SipHeader::MaxForwards.is_multi_valued());
+        assert!(!SipHeader::ContentType.is_multi_valued());
+        assert!(!SipHeader::ContentLength.is_multi_valued());
+        assert!(!SipHeader::Expires.is_multi_valued());
+        assert!(!SipHeader::Date.is_multi_valued());
+        assert!(!SipHeader::Subject.is_multi_valued());
+        assert!(!SipHeader::ReplyTo.is_multi_valued());
+        assert!(!SipHeader::Server.is_multi_valued());
+        assert!(!SipHeader::UserAgent.is_multi_valued());
     }
 }
 

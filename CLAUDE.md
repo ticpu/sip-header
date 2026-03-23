@@ -117,7 +117,9 @@ cargo publish --dry-run
 
 **Never `cargo publish` without completing these steps first:**
 
-1. Create signed annotated tags (`git tag -as`)
+1. Create signed annotated tags with a short changelog (`git tag -as`).
+   The tag message should list notable changes since the previous tag,
+   one line per item, using `git log --oneline <prev-tag>..HEAD` as input.
 2. Push the tags (`git push --tags`)
 3. Wait for CI to pass on the tagged commit
 4. Only then `cargo publish`

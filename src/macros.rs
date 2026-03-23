@@ -45,9 +45,16 @@ macro_rules! define_header_enum {
 
         impl $Name {
             /// Canonical protocol string.
+            // allow(unused_doc_comments): variant doc attrs are propagated into
+            // match arms so that #[cfg] attrs also propagate; the doc attrs
+            // are harmless noise here.
+            #[allow(unused_doc_comments)]
             pub fn as_str(&self) -> &'static str {
                 match self {
-                    $( $Name::$variant => $wire, )+
+                    $(
+                        $(#[$var_meta])*
+                        $Name::$variant => $wire,
+                    )+
                 }
             }
         }
@@ -67,8 +74,10 @@ macro_rules! define_header_enum {
         impl std::str::FromStr for $Name {
             type Err = $Err;
 
+            #[allow(unused_doc_comments)]
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 $(
+                    $(#[$var_meta])*
                     if s.eq_ignore_ascii_case($wire) {
                         return Ok($Name::$variant);
                     }

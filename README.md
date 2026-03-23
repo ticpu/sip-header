@@ -119,6 +119,7 @@ assert_eq!(SipHeader::parse_name("v"), Ok(SipHeader::Via));
 | Feature | Dependencies | Description |
 |---|---|---|
 | `serde` | serde | Serde derives on all types |
+| `draft` | — | Widely-deployed headers from expired IETF drafts (Diversion, Remote-Party-ID) |
 | `conference-info` | quick-xml, serde | RFC 4575 XML parsing |
 
 ## Ecosystem

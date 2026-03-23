@@ -296,6 +296,13 @@ define_header_enum! {
         Warning => "Warning",
         /// `WWW-Authenticate` (RFC 3261).
         WwwAuthenticate => "WWW-Authenticate",
+        // Draft headers — appended after IANA variants to preserve discriminants.
+        /// `Diversion` (draft-levy-sip-diversion-08, superseded by RFC 7044).
+        #[cfg(feature = "draft")]
+        Diversion => "Diversion",
+        /// `Remote-Party-ID` (draft-ietf-sip-privacy-01, superseded by RFC 3325).
+        #[cfg(feature = "draft")]
+        RemotePartyId => "Remote-Party-ID",
     }
 }
 
@@ -351,7 +358,7 @@ impl SipHeader {
     /// Headers listed here use comma-separated or repeated-header semantics
     /// per RFC 3261 §7.3.1 and their defining RFCs.
     pub fn is_multi_valued(&self) -> bool {
-        matches!(
+        if matches!(
             self,
             // RFC 3261 core
             Self::Via
@@ -392,7 +399,22 @@ impl SipHeader {
                 | Self::ServiceRoute
                 // RFC 7044
                 | Self::HistoryInfo
-        )
+        ) {
+            return true;
+        }
+
+        #[cfg(feature = "draft")]
+        if matches!(
+            self,
+            // draft-levy-sip-diversion-08
+            Self::Diversion
+                // draft-ietf-sip-privacy-01
+                | Self::RemotePartyId
+        ) {
+            return true;
+        }
+
+        false
     }
 
     /// Parse a header name, including RFC 3261 §7.3.3 compact forms.
@@ -1025,6 +1047,29 @@ mod multi_valued_tests {
         assert!(!SipHeader::ReplyTo.is_multi_valued());
         assert!(!SipHeader::Server.is_multi_valued());
         assert!(!SipHeader::UserAgent.is_multi_valued());
+    }
+
+    #[test]
+    #[cfg(feature = "draft")]
+    fn draft_multi_valued_headers() {
+        assert!(SipHeader::Diversion.is_multi_valued());
+        assert!(SipHeader::RemotePartyId.is_multi_valued());
+    }
+
+    #[test]
+    #[cfg(feature = "draft")]
+    fn draft_parse_roundtrip() {
+        let d: SipHeader = "Diversion"
+            .parse()
+            .unwrap();
+        assert_eq!(d, SipHeader::Diversion);
+        assert_eq!(d.to_string(), "Diversion");
+
+        let r: SipHeader = "remote-party-id"
+            .parse()
+            .unwrap();
+        assert_eq!(r, SipHeader::RemotePartyId);
+        assert_eq!(r.to_string(), "Remote-Party-ID");
     }
 }
 

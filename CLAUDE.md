@@ -60,6 +60,21 @@ to verify the enum matches `iana-sip-headers.txt`.
 2. Add the variant to `SipHeader` in `src/header.rs`
 3. The check script validates the sync
 
+### `draft` feature — non-IANA headers
+
+The enum is IANA-pure by default. Headers from expired or superseded IETF
+drafts that are still widely deployed (e.g. `Remote-Party-ID`, `Diversion`)
+live behind `#[cfg(feature = "draft")]`. Their wire names are tracked in
+`draft-sip-headers.txt` with comments citing the source draft. The
+pre-commit check script verifies both lists independently.
+
+When adding a draft header:
+
+1. Add the header name and source draft comment to `draft-sip-headers.txt`
+2. Add the variant to `SipHeader` with `#[cfg(feature = "draft")]`
+3. If multi-valued, add to the `#[cfg(feature = "draft")]` block in `is_multi_valued()`
+4. Add `#[cfg(feature = "draft")]` tests
+
 Not every `SipHeader` variant needs a typed parser on `SipHeaderLookup`.
 Only headers with structured values (name-addr, comma-separated entries,
 etc.) get typed accessor methods. Simple string headers are accessed via
@@ -81,6 +96,7 @@ etc.) get typed accessor methods. Simple string headers are accessed via
 cargo fmt --all
 cargo check --message-format=short
 cargo check --features serde --message-format=short
+cargo check --features draft --message-format=short
 cargo check --features conference-info --message-format=short
 cargo clippy --fix --allow-dirty --message-format=short
 cargo test --lib

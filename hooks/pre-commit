@@ -17,6 +17,12 @@ if ! cargo clippy --all-targets --message-format=short -- -D warnings; then
     exit 1
 fi
 
+echo "Running cargo clippy (draft feature)..."
+if ! cargo clippy --all-targets --features draft --message-format=short -- -D warnings; then
+    echo "Clippy found warnings with --features draft. Fix them before committing."
+    exit 1
+fi
+
 echo "Checking documentation coverage..."
 if ! doc_output=$(RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_links" cargo doc --no-deps 2>&1); then
     echo "$doc_output" | grep '^error' | head -20
@@ -28,6 +34,13 @@ echo "Running tests..."
 if ! test_output=$(cargo test 2>&1); then
     echo "$test_output" | tail
     echo "Tests failed. Fix them before committing."
+    exit 1
+fi
+
+echo "Running tests (draft feature)..."
+if ! test_output=$(cargo test --features draft 2>&1); then
+    echo "$test_output" | tail
+    echo "Tests failed with --features draft. Fix them before committing."
     exit 1
 fi
 

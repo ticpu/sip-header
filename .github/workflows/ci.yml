@@ -38,13 +38,20 @@ jobs:
     - name: Check (conference-info)
       run: cargo check --features conference-info --all-targets
 
+    - name: Check (draft)
+      run: cargo check --features draft --all-targets
+
     - name: Clippy
       run: cargo clippy --all-targets -- -D warnings
 
+    - name: Clippy (draft)
+      run: cargo clippy --features draft --all-targets -- -D warnings
+
     - name: Verify SipHeader against IANA registry
       run: |
-        SIP_HEADER_COUNT=$(hooks/check-sip-headers.sh 2>&1 | tail -1 | grep -oP '\d+/\d+')
-        echo "SIP_HEADER_COUNT=${SIP_HEADER_COUNT}" >> "$GITHUB_ENV"
+        output=$(hooks/check-sip-headers.sh 2>&1 | tail -1)
+        echo "SIP_HEADER_COUNT=$(echo "$output" | grep -oP '^\S+ \K\d+/\d+')" >> "$GITHUB_ENV"
+        echo "DRAFT_HEADER_COUNT=$(echo "$output" | grep -oP 'draft \K\d+/\d+' || echo '0/0')" >> "$GITHUB_ENV"
 
     - name: Count SipHeaderLookup accessors
       run: |
@@ -53,7 +60,7 @@ jobs:
     - name: Test
       run: |
         set -o pipefail
-        CARGO_TERM_COLOR=never cargo test 2>&1 | tee test-output.txt
+        CARGO_TERM_COLOR=never cargo test --features draft 2>&1 | tee test-output.txt
         passed=$(grep '^test result:' test-output.txt | sed 's/.*ok\. \([0-9]*\) passed.*/\1/' | paste -sd+ | bc)
         echo "TEST_PASSED=$passed" >> "$GITHUB_ENV"
 

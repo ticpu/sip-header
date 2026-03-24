@@ -11,7 +11,7 @@ documentation = "https://docs.rs/sip-header"
 readme = "README.md"
 keywords = ["sip", "header", "voip", "rfc3261", "parser"]
 categories = ["parser-implementations", "network-programming"]
-exclude = ["CLAUDE.md", "hooks/"]
+exclude = ["CLAUDE.md", "hooks/", "Cargo.lock"]
 
 [features]
 default = []

@@ -172,6 +172,28 @@ impl SipHeaderAddr {
             .map(|(_, v)| v.as_deref())
     }
 
+    /// Parse a comma-separated list of `name-addr` / `addr-spec` values.
+    ///
+    /// Splits on commas at bracket depth zero (via [`split_comma_entries`](crate::split_comma_entries)),
+    /// then parses each entry as a [`SipHeaderAddr`]. Returns an empty `Vec`
+    /// for empty input. Fails on the first unparseable entry.
+    pub fn parse_list(raw: &str) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+        if raw
+            .trim()
+            .is_empty()
+        {
+            return Ok(Vec::new());
+        }
+        crate::split_comma_entries(raw)
+            .into_iter()
+            .map(|entry| {
+                entry
+                    .trim()
+                    .parse()
+            })
+            .collect()
+    }
+
     /// The `tag` parameter value, if present.
     ///
     /// Tag values are simple tokens (never percent-encoded in practice),
@@ -713,8 +735,7 @@ mod tests {
 
     #[test]
     fn parse_list_multiple_entries() {
-        let input =
-            r#""Alice" <sip:alice@example.com>;tag=a, <sip:bob@example.com>, sip:carol@example.com"#;
+        let input = r#""Alice" <sip:alice@example.com>;tag=a, <sip:bob@example.com>, sip:carol@example.com"#;
         let addrs = SipHeaderAddr::parse_list(input).unwrap();
         assert_eq!(addrs.len(), 3);
         assert_eq!(addrs[0].display_name(), Some("Alice"));

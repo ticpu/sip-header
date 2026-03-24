@@ -59,7 +59,7 @@ pub(crate) fn fmt_joined<T: std::fmt::Display>(
 /// SIP headers that carry lists (RFC 3261 §7.3.1) use commas as delimiters,
 /// but commas may also appear inside angle-bracketed URIs. This function
 /// splits only on commas at bracket depth zero.
-pub(crate) fn split_comma_entries(raw: &str) -> Vec<&str> {
+pub fn split_comma_entries(raw: &str) -> Vec<&str> {
     let mut entries = Vec::new();
     let mut depth = 0u32;
     let mut start = 0;

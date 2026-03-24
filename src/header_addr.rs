@@ -712,6 +712,48 @@ mod tests {
     }
 
     #[test]
+    fn parse_list_multiple_entries() {
+        let input =
+            r#""Alice" <sip:alice@example.com>;tag=a, <sip:bob@example.com>, sip:carol@example.com"#;
+        let addrs = SipHeaderAddr::parse_list(input).unwrap();
+        assert_eq!(addrs.len(), 3);
+        assert_eq!(addrs[0].display_name(), Some("Alice"));
+        assert_eq!(addrs[0].tag(), Some("a"));
+        assert_eq!(addrs[1].display_name(), None);
+        assert_eq!(
+            addrs[1]
+                .sip_uri()
+                .unwrap()
+                .user(),
+            Some("bob"),
+        );
+        assert_eq!(
+            addrs[2]
+                .sip_uri()
+                .unwrap()
+                .user(),
+            Some("carol"),
+        );
+    }
+
+    #[test]
+    fn parse_list_single_entry() {
+        let addrs = SipHeaderAddr::parse_list("<sip:alice@example.com>").unwrap();
+        assert_eq!(addrs.len(), 1);
+    }
+
+    #[test]
+    fn parse_list_empty_returns_empty() {
+        let addrs = SipHeaderAddr::parse_list("").unwrap();
+        assert!(addrs.is_empty());
+    }
+
+    #[test]
+    fn parse_list_propagates_parse_error() {
+        assert!(SipHeaderAddr::parse_list("not-a-uri, <sip:ok@example.com>").is_err());
+    }
+
+    #[test]
     fn params_iterator() {
         let addr: SipHeaderAddr = "<sip:user@host>;tag=abc;lr;expires=60"
             .parse()

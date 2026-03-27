@@ -134,7 +134,29 @@ pub fn extract_header(message: &str, name: &str) -> Option<String> {
 /// Returns `None` for status lines (`SIP/2.0 200 OK`) or if the
 /// request line cannot be parsed.
 pub fn extract_request_uri(message: &str) -> Option<String> {
-    todo!()
+    let first_line = message
+        .lines()
+        .next()?;
+    let first_line = first_line
+        .strip_suffix('\r')
+        .unwrap_or(first_line);
+    let mut parts = first_line.split_whitespace();
+    let method = parts.next()?;
+    if method.starts_with("SIP/") {
+        return None;
+    }
+    let uri = parts.next()?;
+    let version = parts.next()?;
+    if parts
+        .next()
+        .is_some()
+    {
+        return None;
+    }
+    if !version.starts_with("SIP/") {
+        return None;
+    }
+    Some(uri.to_string())
 }
 
 impl SipHeader {

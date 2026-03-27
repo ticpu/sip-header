@@ -1,9 +1,13 @@
-//! RFC 3261 SIP message header extraction.
+//! SIP message text extraction utilities.
 //!
-//! Provides [`extract_header`] for pulling header values from raw SIP message
-//! text, handling case-insensitive name matching, header folding (continuation
-//! lines per RFC 3261 §7.3.1), multi-occurrence concatenation, and compact
-//! header forms (RFC 3261 §7.3.3).
+//! Convenience functions for extracting values from raw SIP message text:
+//!
+//! - [`extract_header`] — pull header values with case-insensitive matching,
+//!   header folding (RFC 3261 §7.3.1), and compact forms (RFC 3261 §7.3.3)
+//! - [`extract_request_uri`] — pull the Request-URI from the request line
+//!   (RFC 3261 §7.1)
+//!
+//! Gated behind the `message` feature (enabled by default).
 
 use crate::header::SipHeader;
 
@@ -120,6 +124,17 @@ pub fn extract_header(message: &str, name: &str) -> Option<String> {
     } else {
         Some(values.join(", "))
     }
+}
+
+/// Extract the Request-URI from a SIP request message.
+///
+/// Parses the first line as `Method SP Request-URI SP SIP-Version`
+/// (RFC 3261 Section 7.1) and returns the Request-URI.
+///
+/// Returns `None` for status lines (`SIP/2.0 200 OK`) or if the
+/// request line cannot be parsed.
+pub fn extract_request_uri(message: &str) -> Option<String> {
+    todo!()
 }
 
 impl SipHeader {
@@ -437,5 +452,33 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
             .uri()
             .to_string()
             .contains("urn:service:sos"));
+    }
+
+    // -- extract_request_uri tests (RFC 3261 §7.1) --
+
+    #[test]
+    fn extract_request_uri_invite() {
+        let msg = "INVITE urn:service:sos SIP/2.0\r\nTo: <urn:service:sos>\r\n\r\n";
+        assert_eq!(extract_request_uri(msg), Some("urn:service:sos".into()));
+    }
+
+    #[test]
+    fn extract_request_uri_sip() {
+        let msg = "INVITE sip:+15550001234@198.51.100.1:5060 SIP/2.0\r\n\r\n";
+        assert_eq!(
+            extract_request_uri(msg),
+            Some("sip:+15550001234@198.51.100.1:5060".into()),
+        );
+    }
+
+    #[test]
+    fn extract_request_uri_status_line() {
+        let msg = "SIP/2.0 200 OK\r\n\r\n";
+        assert_eq!(extract_request_uri(msg), None);
+    }
+
+    #[test]
+    fn extract_request_uri_empty() {
+        assert_eq!(extract_request_uri(""), None);
     }
 }

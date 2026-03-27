@@ -9,7 +9,7 @@
 //!
 //! - [`header_addr`] — RFC 3261 `name-addr` with header-level parameters
 //! - [`header`] — SIP header name catalog and [`SipHeaderLookup`] trait
-//! - [`message`] — Extract headers from raw SIP message text
+//! - [`message`] — Extract headers and Request-URI from raw SIP message text (feature: `message`)
 //! - [`call_info`] — RFC 3261 §20.9 Call-Info header parser
 //! - [`history_info`] — RFC 7044 History-Info header parser
 //! - [`geolocation`] — RFC 6442 Geolocation header parser
@@ -27,6 +27,7 @@ pub mod geolocation;
 pub mod header;
 pub mod header_addr;
 pub mod history_info;
+#[cfg(feature = "message")]
 pub mod message;
 
 pub use call_info::{SipCallInfo, SipCallInfoEntry, SipCallInfoError};
@@ -34,7 +35,8 @@ pub use geolocation::{SipGeolocation, SipGeolocationRef};
 pub use header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};
 pub use header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 pub use history_info::{HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason};
-pub use message::extract_header;
+#[cfg(feature = "message")]
+pub use message::{extract_header, extract_request_uri};
 
 /// Format a slice of displayable items as a separated list.
 pub(crate) fn fmt_joined<T: std::fmt::Display>(

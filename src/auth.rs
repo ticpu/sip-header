@@ -339,6 +339,26 @@ mod tests {
     }
 
     #[test]
+    fn parse_digest_uri_with_comma() {
+        let input = r#"Digest uri="sip:example.com,transport=tcp", realm="test""#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        assert_eq!(auth.param("uri"), Some("sip:example.com,transport=tcp"));
+        assert_eq!(auth.realm(), Some("test"));
+    }
+
+    #[test]
+    fn parse_quoted_value_with_multiple_commas() {
+        let input = r#"Digest realm="a,b,c", nonce="test""#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        assert_eq!(auth.realm(), Some("a,b,c"));
+        assert_eq!(auth.nonce(), Some("test"));
+    }
+
+    #[test]
     fn opaque_param() {
         let input = r#"Digest realm="example.com", opaque="5ccc09c""#;
         let auth: SipAuthValue = input

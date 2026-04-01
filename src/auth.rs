@@ -92,6 +92,39 @@ impl SipAuthValue {
     }
 }
 
+/// Split auth params on commas, respecting double-quoted strings.
+///
+/// RFC 3261 §22.4: `auth-param` values may be `quoted-string`, which can
+/// contain commas. This splitter tracks quote state (including backslash
+/// escapes per RFC 3261 §25.1 `quoted-pair`) to avoid splitting inside
+/// quoted values.
+fn split_auth_params(s: &str) -> Vec<&str> {
+    let mut entries = Vec::new();
+    let mut start = 0;
+    let mut in_quotes = false;
+    let mut prev_backslash = false;
+
+    for (i, ch) in s.char_indices() {
+        if prev_backslash {
+            prev_backslash = false;
+            continue;
+        }
+        match ch {
+            '\\' if in_quotes => prev_backslash = true,
+            '"' => in_quotes = !in_quotes,
+            ',' if !in_quotes => {
+                entries.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    if start <= s.len() {
+        entries.push(&s[start..]);
+    }
+    entries
+}
+
 impl FromStr for SipAuthValue {
     type Err = SipAuthError;
 
@@ -115,8 +148,7 @@ impl FromStr for SipAuthValue {
 
         let mut params = Vec::new();
 
-        // Split on commas (parameter separators)
-        for param_str in rest.split(',') {
+        for param_str in split_auth_params(rest) {
             let param_str = param_str.trim();
             if param_str.is_empty() {
                 continue;

@@ -319,6 +319,28 @@ mod tests {
     }
 
     #[test]
+    fn display_always_quotes_rfc_required_fields() {
+        let input = r#"Digest realm="example.com", nonce="abc123", algorithm=MD5"#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        let output = auth.to_string();
+        assert!(output.contains(r#"realm="example.com""#));
+        assert!(output.contains(r#"nonce="abc123""#));
+        assert!(output.contains("algorithm=MD5"));
+    }
+
+    #[test]
+    fn display_quotes_opaque() {
+        let input = r#"Digest realm="example.com", opaque="5ccc""#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        let output = auth.to_string();
+        assert!(output.contains(r#"opaque="5ccc""#));
+    }
+
+    #[test]
     fn param_lookup_case_insensitive() {
         let input = r#"Digest Realm="example.com", NONCE="abc123""#;
         let auth: SipAuthValue = input

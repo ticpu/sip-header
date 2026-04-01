@@ -211,6 +211,11 @@ impl SipWarning {
         &self.entries
     }
 
+    /// Consume self and return entries as a `Vec`.
+    pub fn into_entries(self) -> Vec<SipWarningEntry> {
+        self.entries
+    }
+
     /// Number of warning entries.
     pub fn len(&self) -> usize {
         self.entries
@@ -226,17 +231,7 @@ impl SipWarning {
 
 impl fmt::Display for SipWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, entry) in self
-            .entries
-            .iter()
-            .enumerate()
-        {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", entry)?;
-        }
-        Ok(())
+        crate::fmt_joined(f, &self.entries, ", ")
     }
 }
 
@@ -402,6 +397,16 @@ mod tests {
         let input = r#"301 example.com "Warning""#;
         let warning = SipWarning::parse(input).unwrap();
         assert!(!warning.is_empty());
+    }
+
+    #[test]
+    fn test_into_entries() {
+        let input = r#"301 example.com "First", 399 example.org "Second""#;
+        let warning = SipWarning::parse(input).unwrap();
+        let entries = warning.into_entries();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].code(), 301);
+        assert_eq!(entries[1].code(), 399);
     }
 
     #[test]

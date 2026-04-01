@@ -265,6 +265,11 @@ impl SipVia {
         &self.entries
     }
 
+    /// Consume self and return entries as a `Vec`.
+    pub fn into_entries(self) -> Vec<SipViaEntry> {
+        self.entries
+    }
+
     /// Returns the number of Via entries.
     pub fn len(&self) -> usize {
         self.entries
@@ -280,17 +285,7 @@ impl SipVia {
 
 impl fmt::Display for SipVia {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, entry) in self
-            .entries
-            .iter()
-            .enumerate()
-        {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", entry)?;
-        }
-        Ok(())
+        crate::fmt_joined(f, &self.entries, ", ")
     }
 }
 
@@ -518,6 +513,15 @@ mod tests {
             .into_iter()
             .collect();
         assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn test_into_entries() {
+        let via = SipVia::parse("SIP/2.0/UDP 198.51.100.1:5060, SIP/2.0/TCP 203.0.113.5").unwrap();
+        let entries = via.into_entries();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].host(), "198.51.100.1");
+        assert_eq!(entries[1].host(), "203.0.113.5");
     }
 
     #[test]

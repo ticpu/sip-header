@@ -33,6 +33,7 @@ pub struct SipViaEntry {
     host: String,
     port: Option<u16>,
     params: Vec<(String, Option<String>)>,
+    rport: Option<Option<u16>>,
 }
 
 impl SipViaEntry {
@@ -92,15 +93,11 @@ impl SipViaEntry {
     /// - `None` if the parameter is absent
     /// - `Some(None)` if present without a value
     /// - `Some(Some(port))` if present with a value
+    ///
+    /// Invalid rport values are rejected at parse time, so this accessor
+    /// is infallible.
     pub fn rport(&self) -> Option<Option<u16>> {
-        self.param("rport")
-            .map(|v| {
-                v.as_ref()
-                    .and_then(|s| {
-                        s.parse::<u16>()
-                            .ok()
-                    })
-            })
+        self.rport
     }
 
     fn parse(entry: &str) -> Result<Self, SipViaError> {
@@ -173,6 +170,18 @@ impl SipViaEntry {
             }
         }
 
+        let rport = params
+            .iter()
+            .find(|(k, _)| k == "rport")
+            .map(|(_, v)| match v {
+                None => Ok(None),
+                Some(s) => s
+                    .parse::<u16>()
+                    .map(Some)
+                    .map_err(|_| SipViaError::InvalidFormat(format!("invalid rport value: {s}"))),
+            })
+            .transpose()?;
+
         Ok(Self {
             protocol_name,
             protocol_version,
@@ -180,6 +189,7 @@ impl SipViaEntry {
             host,
             port,
             params,
+            rport,
         })
     }
 }

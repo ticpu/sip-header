@@ -22,6 +22,7 @@ pub use sip_uri;
 
 #[cfg(feature = "conference-info")]
 pub mod conference_info;
+pub mod contact;
 pub mod geolocation;
 pub mod header;
 pub mod header_addr;
@@ -30,6 +31,7 @@ pub mod history_info;
 pub mod message;
 pub mod uri_info;
 
+pub use contact::ContactValue;
 pub use geolocation::{SipGeolocation, SipGeolocationRef};
 pub use header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};
 pub use header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};

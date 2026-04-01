@@ -4,6 +4,7 @@
 //! plus a [`SipHeaderLookup`] trait providing typed convenience accessors for
 //! any key-value store that can look up headers by name.
 
+use crate::contact::ContactValue;
 use crate::header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 use crate::history_info::{HistoryInfo, HistoryInfoError};
 use crate::uri_info::{UriInfo, UriInfoError};
@@ -534,6 +535,17 @@ pub trait SipHeaderLookup {
     /// Parse `Service-Route` into a list of [`SipHeaderAddr`] (RFC 3608).
     fn service_route(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
         parse_addr_list(self.sip_header_all(SipHeader::ServiceRoute))
+    }
+
+    /// Parse `Contact` into a list of [`ContactValue`] (RFC 3261 §20.10).
+    ///
+    /// The Contact header may contain `*` (wildcard, used in REGISTER) or
+    /// a comma-separated list of name-addr/addr-spec entries.
+    fn contact(&self) -> Result<Vec<ContactValue>, ParseSipHeaderAddrError> {
+        match self.sip_header(SipHeader::Contact) {
+            Some(s) => crate::contact::parse_contact_list(s),
+            None => Ok(Vec::new()),
+        }
     }
 
     /// Parse `Alert-Info` into a [`UriInfo`] (RFC 3261 §20.4).
@@ -1177,6 +1189,35 @@ mod tests {
     fn content_encoding_accessor() {
         let h = headers_with(&[("Content-Encoding", "gzip")]);
         assert_eq!(h.content_encoding(), vec!["gzip"]);
+    }
+
+    #[test]
+    fn contact_accessor() {
+        let h = headers_with(&[("Contact", "<sip:alice@198.51.100.1>")]);
+        let contacts = h
+            .contact()
+            .unwrap();
+        assert_eq!(contacts.len(), 1);
+        assert!(matches!(&contacts[0], ContactValue::Addr(_)));
+    }
+
+    #[test]
+    fn contact_wildcard() {
+        let h = headers_with(&[("Contact", "*")]);
+        let contacts = h
+            .contact()
+            .unwrap();
+        assert_eq!(contacts.len(), 1);
+        assert!(matches!(contacts[0], ContactValue::Wildcard));
+    }
+
+    #[test]
+    fn contact_absent() {
+        let h = headers_with(&[]);
+        assert!(h
+            .contact()
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

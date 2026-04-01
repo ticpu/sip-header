@@ -469,6 +469,12 @@ mod tests {
     }
 
     #[test]
+    fn test_rport_invalid_value_is_error() {
+        let result = SipVia::parse("SIP/2.0/UDP 198.51.100.1:5060;rport=garbage");
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_display_roundtrip() {
         let original =
             "SIP/2.0/UDP 198.51.100.1:5060;branch=z9hG4bKnashds8;received=203.0.113.10;rport";

@@ -181,6 +181,23 @@ impl FromStr for SipAuthValue {
     }
 }
 
+/// RFC 2617 §3.2.1/§3.2.2 params that MUST use quoted-string on the wire.
+const MUST_QUOTE_PARAMS: &[&str] = &[
+    "realm", "domain", "nonce", "opaque", "username", "uri", "response", "cnonce", "qop",
+];
+
+fn write_quoted(f: &mut fmt::Formatter<'_>, value: &str) -> fmt::Result {
+    f.write_str("\"")?;
+    for ch in value.chars() {
+        if ch == '"' || ch == '\\' {
+            write!(f, "\\{ch}")?;
+        } else {
+            write!(f, "{ch}")?;
+        }
+    }
+    f.write_str("\"")
+}
+
 impl fmt::Display for SipAuthValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.scheme)?;
@@ -199,13 +216,14 @@ impl fmt::Display for SipAuthValue {
                     write!(f, ", ")?;
                 }
 
-                // Quote values that contain special characters or spaces
-                if value.contains(|c: char| c.is_ascii_whitespace() || c == ',' || c == '"')
+                if MUST_QUOTE_PARAMS.contains(&key.as_str())
+                    || value.contains(|c: char| c.is_ascii_whitespace() || c == ',' || c == '"')
                     || value.is_empty()
                 {
-                    write!(f, "{}=\"{}\"", key, value)?;
+                    write!(f, "{key}=")?;
+                    write_quoted(f, value)?;
                 } else {
-                    write!(f, "{}={}", key, value)?;
+                    write!(f, "{key}={value}")?;
                 }
             }
         }

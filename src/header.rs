@@ -465,51 +465,60 @@ pub trait SipHeaderLookup {
         self.sip_header_str(name.as_str())
     }
 
-    /// Raw `Call-Info` header value (RFC 3261 section 20.9).
-    fn call_info_raw(&self) -> Option<&str> {
-        self.sip_header(SipHeader::CallInfo)
+    /// Return all occurrences of a header by canonical name.
+    ///
+    /// Unlike [`sip_header_str`](SipHeaderLookup::sip_header_str) which returns
+    /// at most one value, this method returns every occurrence. The default
+    /// implementation wraps `sip_header_str` in a single-element `Vec`; storage
+    /// backends that preserve per-occurrence values (e.g. `HashMap<String,
+    /// Vec<String>>`) should override this.
+    fn sip_header_all_str<'a>(&'a self, name: &str) -> Vec<&'a str> {
+        self.sip_header_str(name)
+            .into_iter()
+            .collect()
+    }
+
+    /// Return all occurrences of a header by [`SipHeader`] variant.
+    fn sip_header_all(&self, name: SipHeader) -> Vec<&str> {
+        self.sip_header_all_str(name.as_str())
     }
 
     /// Parse the `Call-Info` header into a [`SipCallInfo`].
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     fn call_info(&self) -> Result<Option<SipCallInfo>, SipCallInfoError> {
-        match self.call_info_raw() {
+        match self.sip_header(SipHeader::CallInfo) {
             Some(s) => SipCallInfo::parse(s).map(Some),
             None => Ok(None),
         }
-    }
-
-    /// Raw `History-Info` header value (RFC 7044).
-    fn history_info_raw(&self) -> Option<&str> {
-        self.sip_header(SipHeader::HistoryInfo)
     }
 
     /// Parse the `History-Info` header into a [`HistoryInfo`].
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     fn history_info(&self) -> Result<Option<HistoryInfo>, HistoryInfoError> {
-        match self.history_info_raw() {
+        match self.sip_header(SipHeader::HistoryInfo) {
             Some(s) => HistoryInfo::parse(s).map(Some),
             None => Ok(None),
         }
     }
 
-    /// Raw `P-Asserted-Identity` header value (RFC 3325).
-    fn p_asserted_identity_raw(&self) -> Option<&str> {
-        self.sip_header(SipHeader::PAssertedIdentity)
-    }
-
-    /// Parse the `P-Asserted-Identity` header into a [`SipHeaderAddr`].
+    /// Parse `P-Asserted-Identity` into a list of [`SipHeaderAddr`].
     ///
-    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
-    fn p_asserted_identity(&self) -> Result<Option<SipHeaderAddr>, ParseSipHeaderAddrError> {
-        match self.p_asserted_identity_raw() {
-            Some(s) => s
-                .parse::<SipHeaderAddr>()
-                .map(Some),
-            None => Ok(None),
+    /// PAI is multi-valued per RFC 3325 — a message may assert up to two
+    /// identities. Returns an empty `Vec` if the header is absent.
+    fn p_asserted_identity(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+        let raw = self.sip_header_all(SipHeader::PAssertedIdentity);
+        if raw.is_empty() {
+            return Ok(Vec::new());
         }
+        raw.into_iter()
+            .flat_map(|s| crate::split_comma_entries(s))
+            .map(|s| {
+                s.trim()
+                    .parse::<SipHeaderAddr>()
+            })
+            .collect()
     }
 }
 
@@ -517,6 +526,24 @@ impl SipHeaderLookup for std::collections::HashMap<String, String> {
     fn sip_header_str(&self, name: &str) -> Option<&str> {
         self.get(name)
             .map(|s| s.as_str())
+    }
+}
+
+impl SipHeaderLookup for std::collections::HashMap<String, Vec<String>> {
+    fn sip_header_str(&self, name: &str) -> Option<&str> {
+        self.get(name)
+            .and_then(|v| v.first())
+            .map(|s| s.as_str())
+    }
+
+    fn sip_header_all_str(&self, name: &str) -> Vec<&str> {
+        self.get(name)
+            .map(|v| {
+                v.iter()
+                    .map(|s| s.as_str())
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -736,7 +763,7 @@ mod tests {
             "<urn:emergency:uid:callid:test:bcf.example.com>;purpose=emergency-CallId",
         )]);
         assert_eq!(
-            h.call_info_raw(),
+            h.sip_header(SipHeader::CallInfo),
             Some("<urn:emergency:uid:callid:test:bcf.example.com>;purpose=emergency-CallId")
         );
     }
@@ -766,38 +793,42 @@ mod tests {
     }
 
     #[test]
-    fn p_asserted_identity_raw_lookup() {
-        let h = headers_with(&[(
-            "P-Asserted-Identity",
-            r#""EXAMPLE CO" <sip:+15551234567@198.51.100.1>"#,
-        )]);
-        assert_eq!(
-            h.p_asserted_identity_raw(),
-            Some(r#""EXAMPLE CO" <sip:+15551234567@198.51.100.1>"#)
-        );
-    }
-
-    #[test]
     fn p_asserted_identity_typed() {
         let h = headers_with(&[(
             "P-Asserted-Identity",
             r#""EXAMPLE CO" <sip:+15551234567@198.51.100.1>"#,
         )]);
-        let pai = h
+        let pais = h
             .p_asserted_identity()
-            .unwrap()
             .unwrap();
-        assert_eq!(pai.display_name(), Some("EXAMPLE CO"));
+        assert_eq!(pais.len(), 1);
+        assert_eq!(pais[0].display_name(), Some("EXAMPLE CO"));
+    }
+
+    #[test]
+    fn p_asserted_identity_multi_value() {
+        let h = headers_with(&[(
+            "P-Asserted-Identity",
+            r#""EXAMPLE CO" <sip:+15551234567@198.51.100.1>, <tel:+15551234567>"#,
+        )]);
+        let pais = h
+            .p_asserted_identity()
+            .unwrap();
+        assert_eq!(pais.len(), 2);
+        assert_eq!(pais[0].display_name(), Some("EXAMPLE CO"));
+        assert!(pais[1]
+            .uri()
+            .to_string()
+            .contains("+15551234567"));
     }
 
     #[test]
     fn p_asserted_identity_absent() {
         let h = headers_with(&[]);
-        assert_eq!(
-            h.p_asserted_identity()
-                .unwrap(),
-            None
-        );
+        assert!(h
+            .p_asserted_identity()
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -807,7 +838,7 @@ mod tests {
             "<sip:alice@esrp.example.com>;index=1,<sip:sos@psap.example.com>;index=1.1",
         )]);
         assert!(h
-            .history_info_raw()
+            .sip_header(SipHeader::HistoryInfo)
             .unwrap()
             .contains("esrp.example.com"));
     }
@@ -835,6 +866,36 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn sip_header_all_str_default() {
+        let h = headers_with(&[("Via", "SIP/2.0/UDP host1")]);
+        let all = h.sip_header_all(SipHeader::Via);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0], "SIP/2.0/UDP host1");
+    }
+
+    #[test]
+    fn sip_header_all_str_absent() {
+        let h = headers_with(&[]);
+        assert!(h
+            .sip_header_all(SipHeader::Via)
+            .is_empty());
+    }
+
+    #[test]
+    fn hashmap_vec_impl() {
+        let mut h: HashMap<String, Vec<String>> = HashMap::new();
+        h.insert(
+            "Via".into(),
+            vec!["SIP/2.0/UDP host1".into(), "SIP/2.0/UDP host2".into()],
+        );
+        assert_eq!(h.sip_header_str("Via"), Some("SIP/2.0/UDP host1"));
+        let all = h.sip_header_all_str("Via");
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0], "SIP/2.0/UDP host1");
+        assert_eq!(all[1], "SIP/2.0/UDP host2");
     }
 
     #[test]
@@ -880,24 +941,23 @@ mod tests {
     #[test]
     fn missing_headers_return_none() {
         let h = headers_with(&[]);
-        assert_eq!(h.call_info_raw(), None);
+        assert_eq!(h.sip_header(SipHeader::CallInfo), None);
         assert_eq!(
             h.call_info()
                 .unwrap(),
             None
         );
-        assert_eq!(h.history_info_raw(), None);
+        assert_eq!(h.sip_header(SipHeader::HistoryInfo), None);
         assert_eq!(
             h.history_info()
                 .unwrap(),
             None
         );
-        assert_eq!(h.p_asserted_identity_raw(), None);
-        assert_eq!(
-            h.p_asserted_identity()
-                .unwrap(),
-            None
-        );
+        assert_eq!(h.sip_header(SipHeader::PAssertedIdentity), None);
+        assert!(h
+            .p_asserted_identity()
+            .unwrap()
+            .is_empty());
     }
 }
 

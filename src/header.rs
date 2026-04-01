@@ -508,17 +508,128 @@ pub trait SipHeaderLookup {
     /// PAI is multi-valued per RFC 3325 — a message may assert up to two
     /// identities. Returns an empty `Vec` if the header is absent.
     fn p_asserted_identity(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
-        let raw = self.sip_header_all(SipHeader::PAssertedIdentity);
-        if raw.is_empty() {
-            return Ok(Vec::new());
+        parse_addr_list(self.sip_header_all(SipHeader::PAssertedIdentity))
+    }
+
+    /// Parse `P-Preferred-Identity` into a list of [`SipHeaderAddr`] (RFC 3325).
+    fn p_preferred_identity(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+        parse_addr_list(self.sip_header_all(SipHeader::PPreferredIdentity))
+    }
+
+    /// Parse `Route` into a list of [`SipHeaderAddr`] (RFC 3261 §20.34).
+    fn route(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+        parse_addr_list(self.sip_header_all(SipHeader::Route))
+    }
+
+    /// Parse `Record-Route` into a list of [`SipHeaderAddr`] (RFC 3261 §20.30).
+    fn record_route(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+        parse_addr_list(self.sip_header_all(SipHeader::RecordRoute))
+    }
+
+    /// Parse `Path` into a list of [`SipHeaderAddr`] (RFC 3327).
+    fn path(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+        parse_addr_list(self.sip_header_all(SipHeader::Path))
+    }
+
+    /// Parse `Service-Route` into a list of [`SipHeaderAddr`] (RFC 3608).
+    fn service_route(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+        parse_addr_list(self.sip_header_all(SipHeader::ServiceRoute))
+    }
+
+    /// Parse `Alert-Info` into a [`UriInfo`] (RFC 3261 §20.4).
+    fn alert_info(&self) -> Result<Option<UriInfo>, UriInfoError> {
+        match self.sip_header(SipHeader::AlertInfo) {
+            Some(s) => UriInfo::parse(s).map(Some),
+            None => Ok(None),
         }
-        raw.into_iter()
-            .flat_map(|s| crate::split_comma_entries(s))
-            .map(|s| {
-                s.trim()
-                    .parse::<SipHeaderAddr>()
-            })
-            .collect()
+    }
+
+    /// Parse `Error-Info` into a [`UriInfo`] (RFC 3261 §20.18).
+    fn error_info(&self) -> Result<Option<UriInfo>, UriInfoError> {
+        match self.sip_header(SipHeader::ErrorInfo) {
+            Some(s) => UriInfo::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// `Allow` header values as individual method tokens (RFC 3261 §20.5).
+    fn allow(&self) -> Vec<&str> {
+        split_trim(self.sip_header(SipHeader::Allow))
+    }
+
+    /// `Supported` header values as individual option-tag tokens (RFC 3261 §20.37).
+    fn supported(&self) -> Vec<&str> {
+        split_trim(self.sip_header(SipHeader::Supported))
+    }
+
+    /// `Require` header values as individual option-tag tokens (RFC 3261 §20.32).
+    fn require_header(&self) -> Vec<&str> {
+        split_trim(self.sip_header(SipHeader::Require))
+    }
+
+    /// `Proxy-Require` values as individual option-tag tokens (RFC 3261 §20.29).
+    fn proxy_require(&self) -> Vec<&str> {
+        split_trim(self.sip_header(SipHeader::ProxyRequire))
+    }
+
+    /// `Unsupported` values as individual option-tag tokens (RFC 3261 §20.40).
+    fn unsupported(&self) -> Vec<&str> {
+        split_trim(self.sip_header(SipHeader::Unsupported))
+    }
+
+    /// `Allow-Events` values as individual event-type tokens (RFC 6665).
+    fn allow_events(&self) -> Vec<&str> {
+        split_trim(self.sip_header(SipHeader::AllowEvents))
+    }
+
+    /// `Content-Encoding` values as individual tokens (RFC 3261 §20.12).
+    fn content_encoding(&self) -> Vec<&str> {
+        split_trim(self.sip_header(SipHeader::ContentEncoding))
+    }
+
+    /// `Content-Language` values as individual language tags (RFC 3261 §20.13).
+    fn content_language(&self) -> Vec<&str> {
+        split_trim(self.sip_header(SipHeader::ContentLanguage))
+    }
+
+    /// `In-Reply-To` values as individual Call-ID tokens (RFC 3261 §20.21).
+    fn in_reply_to(&self) -> Vec<&str> {
+        split_trim(self.sip_header(SipHeader::InReplyTo))
+    }
+
+    /// Parse `Diversion` into a list of [`SipHeaderAddr`] (draft-levy-sip-diversion-08).
+    #[cfg(feature = "draft")]
+    fn diversion(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+        parse_addr_list(self.sip_header_all(SipHeader::Diversion))
+    }
+
+    /// Parse `Remote-Party-ID` into a list of [`SipHeaderAddr`] (draft-ietf-sip-privacy-01).
+    #[cfg(feature = "draft")]
+    fn remote_party_id(&self) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+        parse_addr_list(self.sip_header_all(SipHeader::RemotePartyId))
+    }
+}
+
+fn parse_addr_list(raw: Vec<&str>) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+    if raw.is_empty() {
+        return Ok(Vec::new());
+    }
+    raw.into_iter()
+        .flat_map(|s| crate::split_comma_entries(s))
+        .map(|s| {
+            s.trim()
+                .parse::<SipHeaderAddr>()
+        })
+        .collect()
+}
+
+fn split_trim(raw: Option<&str>) -> Vec<&str> {
+    match raw {
+        Some(s) => crate::split_comma_entries(s)
+            .into_iter()
+            .map(str::trim)
+            .collect(),
+        None => Vec::new(),
     }
 }
 
@@ -958,6 +1069,122 @@ mod tests {
             .p_asserted_identity()
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn route_accessor() {
+        let h = headers_with(&[(
+            "Route",
+            "<sip:proxy1.example.com;lr>, <sip:proxy2.example.com;lr>",
+        )]);
+        let routes = h
+            .route()
+            .unwrap();
+        assert_eq!(routes.len(), 2);
+        assert!(routes[0]
+            .uri()
+            .to_string()
+            .contains("proxy1"));
+        assert!(routes[1]
+            .uri()
+            .to_string()
+            .contains("proxy2"));
+    }
+
+    #[test]
+    fn route_absent() {
+        let h = headers_with(&[]);
+        assert!(h
+            .route()
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn record_route_accessor() {
+        let h = headers_with(&[("Record-Route", "<sip:ss1.example.com;lr>")]);
+        let rr = h
+            .record_route()
+            .unwrap();
+        assert_eq!(rr.len(), 1);
+    }
+
+    #[test]
+    fn allow_accessor() {
+        let h = headers_with(&[("Allow", "INVITE, ACK, OPTIONS, BYE")]);
+        let methods = h.allow();
+        assert_eq!(methods, vec!["INVITE", "ACK", "OPTIONS", "BYE"]);
+    }
+
+    #[test]
+    fn allow_absent() {
+        let h = headers_with(&[]);
+        assert!(h
+            .allow()
+            .is_empty());
+    }
+
+    #[test]
+    fn supported_accessor() {
+        let h = headers_with(&[("Supported", "100rel, timer")]);
+        let opts = h.supported();
+        assert_eq!(opts, vec!["100rel", "timer"]);
+    }
+
+    #[test]
+    fn require_header_accessor() {
+        let h = headers_with(&[("Require", "100rel")]);
+        assert_eq!(h.require_header(), vec!["100rel"]);
+    }
+
+    #[test]
+    fn alert_info_accessor() {
+        let h = headers_with(&[("Alert-Info", "<http://www.example.com/sounds/moo.wav>")]);
+        let ai = h
+            .alert_info()
+            .unwrap()
+            .unwrap();
+        assert_eq!(ai.len(), 1);
+        assert!(ai.entries()[0]
+            .data
+            .contains("moo.wav"));
+    }
+
+    #[test]
+    fn error_info_accessor() {
+        let h = headers_with(&[("Error-Info", "<sip:not-in-service@example.com>")]);
+        let ei = h
+            .error_info()
+            .unwrap()
+            .unwrap();
+        assert_eq!(ei.len(), 1);
+    }
+
+    #[test]
+    fn p_preferred_identity_accessor() {
+        let h = headers_with(&[(
+            "P-Preferred-Identity",
+            r#""User" <sip:+15551234567@198.51.100.1>"#,
+        )]);
+        let ppi = h
+            .p_preferred_identity()
+            .unwrap();
+        assert_eq!(ppi.len(), 1);
+        assert_eq!(ppi[0].display_name(), Some("User"));
+    }
+
+    #[test]
+    fn content_encoding_accessor() {
+        let h = headers_with(&[("Content-Encoding", "gzip")]);
+        assert_eq!(h.content_encoding(), vec!["gzip"]);
+    }
+
+    #[test]
+    fn in_reply_to_accessor() {
+        let h = headers_with(&[("In-Reply-To", "call1@example.com, call2@example.com")]);
+        let calls = h.in_reply_to();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0], "call1@example.com");
     }
 }
 

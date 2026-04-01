@@ -846,18 +846,20 @@ mod tests {
             "P-Asserted-Identity: \"Corp\" <sip:+15551234567@198.51.100.1>\r\n",
             "\r\n",
         );
+        let ci = SipHeader::CallInfo.extract_from(msg);
+        assert_eq!(ci.len(), 1);
         assert_eq!(
-            SipHeader::CallInfo.extract_from(msg),
-            Some("<urn:emergency:uid:callid:abc>;purpose=emergency-CallId".into())
+            ci[0],
+            "<urn:emergency:uid:callid:abc>;purpose=emergency-CallId"
         );
-        assert_eq!(
-            SipHeader::HistoryInfo.extract_from(msg),
-            Some("<sip:esrp@example.com>;index=1".into())
-        );
-        assert_eq!(
-            SipHeader::PAssertedIdentity.extract_from(msg),
-            Some("\"Corp\" <sip:+15551234567@198.51.100.1>".into())
-        );
+
+        let hi = SipHeader::HistoryInfo.extract_from(msg);
+        assert_eq!(hi.len(), 1);
+        assert_eq!(hi[0], "<sip:esrp@example.com>;index=1");
+
+        let pai = SipHeader::PAssertedIdentity.extract_from(msg);
+        assert_eq!(pai.len(), 1);
+        assert_eq!(pai[0], "\"Corp\" <sip:+15551234567@198.51.100.1>");
     }
 
     #[test]
@@ -867,8 +869,12 @@ mod tests {
             "From: Alice <sip:alice@host>\r\n",
             "\r\n",
         );
-        assert_eq!(SipHeader::CallInfo.extract_from(msg), None);
-        assert_eq!(SipHeader::PAssertedIdentity.extract_from(msg), None);
+        assert!(SipHeader::CallInfo
+            .extract_from(msg)
+            .is_empty());
+        assert!(SipHeader::PAssertedIdentity
+            .extract_from(msg)
+            .is_empty());
     }
 
     #[test]

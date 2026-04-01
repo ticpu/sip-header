@@ -1,30 +1,31 @@
 //! SIP Accept header parser (RFC 3261 §20.1).
 
 use std::fmt;
+use std::str::FromStr;
 
 /// A single Accept entry: `type/subtype *(SEMI accept-param)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SipAcceptEntry {
-    media_type: String,
-    subtype: String,
+    media_range: String,
+    slash_pos: usize,
     params: Vec<(String, String)>,
 }
 
 impl SipAcceptEntry {
     /// The media type (e.g. `"application"`).
     pub fn media_type(&self) -> &str {
-        &self.media_type
+        &self.media_range[..self.slash_pos]
     }
 
     /// The media subtype (e.g. `"sdp"`).
     pub fn subtype(&self) -> &str {
-        &self.subtype
+        &self.media_range[self.slash_pos + 1..]
     }
 
     /// The full media range as `type/subtype`.
-    pub fn media_range(&self) -> String {
-        format!("{}/{}", self.media_type, self.subtype)
+    pub fn media_range(&self) -> &str {
+        &self.media_range
     }
 
     /// All parameters as `(key, value)` pairs.
@@ -48,7 +49,7 @@ impl SipAcceptEntry {
 
 impl fmt::Display for SipAcceptEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}/{}", self.media_type, self.subtype)?;
+        write!(f, "{}", self.media_range)?;
         for (key, value) in &self.params {
             write!(f, ";{key}={value}")?;
         }
@@ -88,20 +89,21 @@ fn parse_accept_entry(raw: &str) -> Result<SipAcceptEntry, SipAcceptError> {
         None => (raw, None),
     };
 
-    let (media_type, subtype) = media_part
+    let (type_str, subtype_str) = media_part
         .split_once('/')
         .ok_or_else(|| SipAcceptError::InvalidFormat(raw.to_string()))?;
 
-    let media_type = media_type
-        .trim()
-        .to_ascii_lowercase();
-    let subtype = subtype
-        .trim()
-        .to_ascii_lowercase();
+    let type_str = type_str.trim();
+    let subtype_str = subtype_str.trim();
 
-    if media_type.is_empty() || subtype.is_empty() {
+    if type_str.is_empty() || subtype_str.is_empty() {
         return Err(SipAcceptError::InvalidFormat(raw.to_string()));
     }
+
+    let mut media_range = type_str.to_ascii_lowercase();
+    let slash_pos = media_range.len();
+    media_range.push('/');
+    media_range.push_str(&subtype_str.to_ascii_lowercase());
 
     let mut params = Vec::new();
     if let Some(params_str) = params_part {
@@ -125,8 +127,8 @@ fn parse_accept_entry(raw: &str) -> Result<SipAcceptEntry, SipAcceptError> {
     }
 
     Ok(SipAcceptEntry {
-        media_type,
-        subtype,
+        media_range,
+        slash_pos,
         params,
     })
 }
@@ -179,6 +181,14 @@ impl SipAccept {
 impl fmt::Display for SipAccept {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         crate::fmt_joined(f, &self.0, ", ")
+    }
+}
+
+impl FromStr for SipAccept {
+    type Err = SipAcceptError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
     }
 }
 
@@ -247,6 +257,14 @@ mod tests {
             SipAccept::parse("application"),
             Err(SipAcceptError::InvalidFormat(_))
         ));
+    }
+
+    #[test]
+    fn from_str() {
+        let accept: SipAccept = "application/sdp"
+            .parse()
+            .unwrap();
+        assert_eq!(accept.len(), 1);
     }
 
     #[test]

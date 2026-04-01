@@ -1,6 +1,7 @@
 //! SIP Warning header parser (RFC 3261 §20.43).
 
 use std::fmt;
+use std::str::FromStr;
 
 /// Error parsing a SIP Warning header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -235,6 +236,14 @@ impl fmt::Display for SipWarning {
     }
 }
 
+impl FromStr for SipWarning {
+    type Err = SipWarningError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
+    }
+}
+
 impl IntoIterator for SipWarning {
     type Item = SipWarningEntry;
     type IntoIter = std::vec::IntoIter<SipWarningEntry>;
@@ -407,6 +416,24 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].code(), 301);
         assert_eq!(entries[1].code(), 399);
+    }
+
+    #[test]
+    fn test_comma_in_warn_text() {
+        let input = r#"301 example.com "text, with comma", 399 example.org "fine""#;
+        let warning = SipWarning::parse(input).unwrap();
+        assert_eq!(warning.len(), 2);
+        assert_eq!(warning.entries()[0].text(), "text, with comma");
+        assert_eq!(warning.entries()[1].text(), "fine");
+    }
+
+    #[test]
+    fn test_from_str() {
+        let input = r#"301 example.com "warning""#;
+        let warning: SipWarning = input
+            .parse()
+            .unwrap();
+        assert_eq!(warning.len(), 1);
     }
 
     #[test]

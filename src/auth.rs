@@ -164,14 +164,16 @@ impl FromStr for SipAuthValue {
             let key = key
                 .trim()
                 .to_ascii_lowercase();
-            let mut value = value.trim();
+            let value = value.trim();
 
-            // Strip quotes if present
-            if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
-                value = &value[1..value.len() - 1];
-            }
+            // Strip quotes and unescape quoted-pair sequences (RFC 3261 §25.1)
+            let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                unquote(&value[1..value.len() - 1])
+            } else {
+                value.to_string()
+            };
 
-            params.push((key, value.to_string()));
+            params.push((key, value));
         }
 
         Ok(SipAuthValue {
@@ -181,9 +183,32 @@ impl FromStr for SipAuthValue {
     }
 }
 
+/// Unescape `quoted-pair` sequences: `\"` → `"`, `\\` → `\` (RFC 3261 §25.1).
+fn unquote(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut escaped = false;
+    for ch in s.chars() {
+        if escaped {
+            result.push(ch);
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
 /// RFC 2617 §3.2.1/§3.2.2 params that MUST use quoted-string on the wire.
+///
+/// `qop` is intentionally absent: RFC 2617 §3.2.2 specifies it as unquoted
+/// (`token`) in Authorization, while §3.2.1 quotes it in challenges. Since
+/// `SipAuthValue` serves both roles, we rely on the fallback condition to
+/// quote values containing commas (e.g. `auth,auth-int`) while leaving
+/// simple tokens like `auth` unquoted.
 const MUST_QUOTE_PARAMS: &[&str] = &[
-    "realm", "domain", "nonce", "opaque", "username", "uri", "response", "cnonce", "qop",
+    "realm", "domain", "nonce", "opaque", "username", "uri", "response", "cnonce",
 ];
 
 fn write_quoted(f: &mut fmt::Formatter<'_>, value: &str) -> fmt::Result {
@@ -439,5 +464,70 @@ mod tests {
 
         assert_eq!(auth.realm(), Some("example.com"));
         assert_eq!(auth.opaque(), Some("5ccc09c"));
+    }
+
+    #[test]
+    fn unescape_quoted_pair_in_value() {
+        let input = r#"Digest realm="foo\"bar""#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        assert_eq!(auth.realm(), Some(r#"foo"bar"#));
+    }
+
+    #[test]
+    fn unescape_backslash_in_value() {
+        let input = r#"Digest realm="C:\\path""#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        assert_eq!(auth.realm(), Some(r#"C:\path"#));
+    }
+
+    #[test]
+    fn roundtrip_with_escaped_quotes() {
+        let input = r#"Digest realm="foo\"bar", nonce="test""#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        let output = auth.to_string();
+        let auth2: SipAuthValue = output
+            .parse()
+            .unwrap();
+        assert_eq!(auth, auth2);
+    }
+
+    #[test]
+    fn roundtrip_with_escaped_backslash() {
+        let input = r#"Digest realm="C:\\path", nonce="test""#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        let output = auth.to_string();
+        let auth2: SipAuthValue = output
+            .parse()
+            .unwrap();
+        assert_eq!(auth, auth2);
+    }
+
+    #[test]
+    fn qop_unquoted_in_display() {
+        let input = r#"Digest realm="example.com", qop="auth""#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        let output = auth.to_string();
+        assert!(output.contains("qop=auth"));
+        assert!(!output.contains("qop=\"auth\""));
+    }
+
+    #[test]
+    fn qop_quoted_when_contains_comma() {
+        let input = r#"Digest realm="example.com", qop="auth,auth-int""#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        let output = auth.to_string();
+        assert!(output.contains(r#"qop="auth,auth-int""#));
     }
 }

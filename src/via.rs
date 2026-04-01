@@ -1,6 +1,7 @@
 //! SIP Via header parser (RFC 3261 §20.42).
 
 use std::fmt;
+use std::str::FromStr;
 
 /// Error parsing a SIP Via header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -289,6 +290,14 @@ impl fmt::Display for SipVia {
     }
 }
 
+impl FromStr for SipVia {
+    type Err = SipViaError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
+    }
+}
+
 impl IntoIterator for SipVia {
     type Item = SipViaEntry;
     type IntoIter = std::vec::IntoIter<SipViaEntry>;
@@ -522,6 +531,14 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].host(), "198.51.100.1");
         assert_eq!(entries[1].host(), "203.0.113.5");
+    }
+
+    #[test]
+    fn test_from_str() {
+        let via: SipVia = "SIP/2.0/UDP 198.51.100.1:5060"
+            .parse()
+            .unwrap();
+        assert_eq!(via.len(), 1);
     }
 
     #[test]

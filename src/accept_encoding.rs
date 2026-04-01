@@ -47,6 +47,7 @@ impl fmt::Display for SipAcceptEncodingEntry {
 
 /// Errors from parsing an Accept-Encoding header value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SipAcceptEncodingError {
     /// The input string was empty or whitespace-only.
     Empty,

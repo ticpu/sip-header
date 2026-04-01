@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 /// Error type for SIP authentication value parsing.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SipAuthError {
     /// The input string was empty.
     Empty,

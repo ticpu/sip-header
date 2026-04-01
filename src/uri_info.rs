@@ -10,6 +10,7 @@ use std::fmt;
 /// The data field contains the URI stripped of angle brackets.
 /// Metadata keys are stored lowercased; values are preserved as-is.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UriInfoEntry {
     /// The URI or data inside the angle brackets, with brackets stripped.
     pub data: String,
@@ -70,6 +71,7 @@ pub struct UriInfo(Vec<UriInfoEntry>);
 
 /// Errors from parsing a URI-info-style header value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum UriInfoError {
     /// The input string was empty or whitespace-only.
     Empty,

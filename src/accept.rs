@@ -58,6 +58,7 @@ impl fmt::Display for SipAcceptEntry {
 
 /// Errors from parsing an Accept header value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SipAcceptError {
     /// The input string was empty or whitespace-only.
     Empty,

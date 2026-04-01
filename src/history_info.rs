@@ -9,6 +9,7 @@ use crate::header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 
 /// Errors from parsing a History-Info header value (RFC 7044).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum HistoryInfoError {
     /// The input string was empty or whitespace-only.
     Empty,

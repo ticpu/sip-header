@@ -11,6 +11,7 @@ use std::fmt;
 /// `cid:` references against the SIP message body (multipart MIME) or
 /// dereferencing HTTP URLs is the caller's responsibility.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SipGeolocationRef {
     /// Content-ID reference to a MIME body part (e.g., `cid:uuid`).
     Cid(String),

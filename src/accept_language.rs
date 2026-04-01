@@ -47,6 +47,7 @@ impl fmt::Display for SipAcceptLanguageEntry {
 
 /// Errors from parsing an Accept-Language header value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SipAcceptLanguageError {
     /// The input string was empty or whitespace-only.
     Empty,

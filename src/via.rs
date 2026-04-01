@@ -4,6 +4,7 @@ use std::fmt;
 
 /// Error parsing a SIP Via header.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SipViaError {
     /// The Via header value is empty.
     Empty,

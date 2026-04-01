@@ -65,6 +65,7 @@ impl fmt::Display for SipSecurityMechanism {
 
 /// Errors from parsing a security mechanism header value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SipSecurityError {
     /// The input string was empty or whitespace-only.
     Empty,

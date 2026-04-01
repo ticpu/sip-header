@@ -1,13 +1,16 @@
-//! SIP Call-Info header parser (RFC 3261 §20.9).
+//! Parser for SIP headers using `<absoluteURI> *(SEMI generic-param)` syntax.
+//!
+//! Shared by Call-Info (RFC 3261 §20.9), Alert-Info (RFC 3261 §20.4),
+//! and Error-Info (RFC 3261 §20.18).
 
 use std::fmt;
 
-/// One entry from a SIP Call-Info header: `<uri>;key=value;key=value`.
+/// One `<uri>;key=value;key=value` entry from a URI-info-style header.
 ///
 /// The data field contains the URI stripped of angle brackets.
 /// Metadata keys are stored lowercased; values are preserved as-is.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SipCallInfoEntry {
+pub struct UriInfoEntry {
     /// The URI or data inside the angle brackets, with brackets stripped.
     pub data: String,
     /// Semicolon-delimited parameters as `(key, value)` pairs.
@@ -16,7 +19,7 @@ pub struct SipCallInfoEntry {
     pub metadata: Vec<(String, String)>,
 }
 
-impl SipCallInfoEntry {
+impl UriInfoEntry {
     /// Look up a metadata parameter by key (case-insensitive).
     pub fn param(&self, key: &str) -> Option<&str> {
         self.metadata
@@ -36,7 +39,7 @@ impl SipCallInfoEntry {
     }
 }
 
-impl fmt::Display for SipCallInfoEntry {
+impl fmt::Display for UriInfoEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<{}>", self.data)?;
         for (key, value) in &self.metadata {
@@ -50,45 +53,47 @@ impl fmt::Display for SipCallInfoEntry {
     }
 }
 
-/// Parsed SIP Call-Info header value. Contains zero or more entries.
+/// Parsed `<absoluteURI> *(SEMI generic-param)` header value.
+///
+/// Used by Call-Info, Alert-Info, and Error-Info. Contains one or more entries.
 ///
 /// ```
-/// use sip_header::SipCallInfo;
+/// use sip_header::UriInfo;
 ///
 /// let raw = "<urn:example:call:123>;purpose=emergency-CallId,<https://example.com/data>;purpose=EmergencyCallData.ServiceInfo";
-/// let info = SipCallInfo::parse(raw).unwrap();
+/// let info = UriInfo::parse(raw).unwrap();
 /// assert_eq!(info.entries().len(), 2);
 /// assert_eq!(info.entries()[0].purpose(), Some("emergency-CallId"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SipCallInfo(Vec<SipCallInfoEntry>);
+pub struct UriInfo(Vec<UriInfoEntry>);
 
-/// Errors from parsing a SIP Call-Info header value.
+/// Errors from parsing a URI-info-style header value.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SipCallInfoError {
+pub enum UriInfoError {
     /// The input string was empty or whitespace-only.
     Empty,
     /// An entry was found without angle brackets around the URI.
     MissingAngleBrackets(String),
 }
 
-impl fmt::Display for SipCallInfoError {
+impl fmt::Display for UriInfoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Empty => write!(f, "empty Call-Info header"),
+            Self::Empty => write!(f, "empty URI-info header value"),
             Self::MissingAngleBrackets(raw) => {
-                write!(f, "missing angle brackets in Call-Info entry: {raw}")
+                write!(f, "missing angle brackets in URI-info entry: {raw}")
             }
         }
     }
 }
 
-impl std::error::Error for SipCallInfoError {}
+impl std::error::Error for UriInfoError {}
 
-fn parse_entry(raw: &str) -> Result<SipCallInfoEntry, SipCallInfoError> {
+fn parse_entry(raw: &str) -> Result<UriInfoEntry, UriInfoError> {
     let raw = raw.trim();
     if raw.is_empty() {
-        return Err(SipCallInfoError::MissingAngleBrackets(raw.to_string()));
+        return Err(UriInfoError::MissingAngleBrackets(raw.to_string()));
     }
 
     // Split on first ';' to separate the URI from parameters.
@@ -103,7 +108,7 @@ fn parse_entry(raw: &str) -> Result<SipCallInfoEntry, SipCallInfoError> {
         .trim_matches(|c| c == '<' || c == '>')
         .to_string();
     if data.is_empty() {
-        return Err(SipCallInfoError::MissingAngleBrackets(raw.to_string()));
+        return Err(UriInfoError::MissingAngleBrackets(raw.to_string()));
     }
 
     let mut metadata = Vec::new();
@@ -129,17 +134,17 @@ fn parse_entry(raw: &str) -> Result<SipCallInfoEntry, SipCallInfoError> {
         }
     }
 
-    Ok(SipCallInfoEntry { data, metadata })
+    Ok(UriInfoEntry { data, metadata })
 }
 
 use crate::split_comma_entries;
 
-impl SipCallInfo {
-    /// Parse a standard comma-separated Call-Info header value (RFC 3261 §20.9).
-    pub fn parse(raw: &str) -> Result<Self, SipCallInfoError> {
+impl UriInfo {
+    /// Parse a comma-separated `<absoluteURI> *(SEMI generic-param)` value.
+    pub fn parse(raw: &str) -> Result<Self, UriInfoError> {
         let raw = raw.trim();
         if raw.is_empty() {
-            return Err(SipCallInfoError::Empty);
+            return Err(UriInfoError::Empty);
         }
         Self::from_entries(split_comma_entries(raw))
     }
@@ -151,24 +156,24 @@ impl SipCallInfo {
     /// a transport-specific array encoding).
     pub fn from_entries<'a>(
         entries: impl IntoIterator<Item = &'a str>,
-    ) -> Result<Self, SipCallInfoError> {
+    ) -> Result<Self, UriInfoError> {
         let entries: Vec<_> = entries
             .into_iter()
             .map(parse_entry)
             .collect::<Result<_, _>>()?;
         if entries.is_empty() {
-            return Err(SipCallInfoError::Empty);
+            return Err(UriInfoError::Empty);
         }
         Ok(Self(entries))
     }
 
     /// The parsed entries as a slice.
-    pub fn entries(&self) -> &[SipCallInfoEntry] {
+    pub fn entries(&self) -> &[UriInfoEntry] {
         &self.0
     }
 
     /// Consume self and return the entries as a `Vec`.
-    pub fn into_entries(self) -> Vec<SipCallInfoEntry> {
+    pub fn into_entries(self) -> Vec<UriInfoEntry> {
         self.0
     }
 
@@ -185,15 +190,15 @@ impl SipCallInfo {
     }
 }
 
-impl fmt::Display for SipCallInfo {
+impl fmt::Display for UriInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         crate::fmt_joined(f, &self.0, ",")
     }
 }
 
-impl<'a> IntoIterator for &'a SipCallInfo {
-    type Item = &'a SipCallInfoEntry;
-    type IntoIter = std::slice::Iter<'a, SipCallInfoEntry>;
+impl<'a> IntoIterator for &'a UriInfo {
+    type Item = &'a UriInfoEntry;
+    type IntoIter = std::slice::Iter<'a, UriInfoEntry>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0
@@ -201,9 +206,9 @@ impl<'a> IntoIterator for &'a SipCallInfo {
     }
 }
 
-impl IntoIterator for SipCallInfo {
-    type Item = SipCallInfoEntry;
-    type IntoIter = std::vec::IntoIter<SipCallInfoEntry>;
+impl IntoIterator for UriInfo {
+    type Item = UriInfoEntry;
+    type IntoIter = std::vec::IntoIter<UriInfoEntry>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0
@@ -215,7 +220,7 @@ impl IntoIterator for SipCallInfo {
 mod tests {
     use super::*;
 
-    // -- SipCallInfoEntry tests --
+    // -- UriInfoEntry tests --
 
     #[test]
     fn entry_no_metadata() {
@@ -328,7 +333,7 @@ mod tests {
         assert_eq!(entry.to_string(), "<data>;flagkey");
     }
 
-    // -- SipCallInfo tests --
+    // -- UriInfo tests --
 
     const SAMPLE_EMERGENCY: &str = "\
 <urn:emergency:uid:callid:20250401080740945abc123:bcf.example.com>;purpose=emergency-CallId,\
@@ -354,7 +359,7 @@ mod tests {
 
     #[test]
     fn parse_comma_separated() {
-        let info = SipCallInfo::parse(SAMPLE_EMERGENCY).unwrap();
+        let info = UriInfo::parse(SAMPLE_EMERGENCY).unwrap();
         assert_eq!(info.len(), 4);
         assert_eq!(info.entries()[0].purpose(), Some("emergency-CallId"));
         assert_eq!(info.entries()[1].purpose(), Some("emergency-IncidentId"));
@@ -362,13 +367,13 @@ mod tests {
 
     #[test]
     fn parse_full_fixture_all_entries() {
-        let info = SipCallInfo::parse(SAMPLE_FULL).unwrap();
+        let info = UriInfo::parse(SAMPLE_FULL).unwrap();
         assert_eq!(info.len(), 8);
     }
 
     #[test]
     fn full_fixture_nena_prefix_callid() {
-        let info = SipCallInfo::parse(SAMPLE_FULL).unwrap();
+        let info = UriInfo::parse(SAMPLE_FULL).unwrap();
         let entry = info
             .entries()
             .iter()
@@ -381,7 +386,7 @@ mod tests {
 
     #[test]
     fn full_fixture_legacy_eido_purpose() {
-        let info = SipCallInfo::parse(SAMPLE_FULL).unwrap();
+        let info = UriInfo::parse(SAMPLE_FULL).unwrap();
         let eido: Vec<_> = info
             .entries()
             .iter()
@@ -398,7 +403,7 @@ mod tests {
 
     #[test]
     fn full_fixture_trailing_semicolon_with_site() {
-        let info = SipCallInfo::parse(SAMPLE_FULL).unwrap();
+        let info = UriInfo::parse(SAMPLE_FULL).unwrap();
         let with_site: Vec<_> = info
             .entries()
             .iter()
@@ -413,7 +418,7 @@ mod tests {
 
     #[test]
     fn find_by_purpose() {
-        let info = SipCallInfo::parse(SAMPLE_EMERGENCY).unwrap();
+        let info = UriInfo::parse(SAMPLE_EMERGENCY).unwrap();
 
         let call_id = info
             .entries()
@@ -437,17 +442,17 @@ mod tests {
     #[test]
     fn param_lookup_by_purpose() {
         let legacy = "<urn:nena:callid:test:example.ca>;purpose=nena-CallId";
-        let info = SipCallInfo::parse(legacy).unwrap();
+        let info = UriInfo::parse(legacy).unwrap();
         assert_eq!(info.entries()[0].purpose(), Some("nena-CallId"));
 
         let modern = "<urn:emergency:uid:callid:test:example.ca>;purpose=emergency-CallId";
-        let info = SipCallInfo::parse(modern).unwrap();
+        let info = UriInfo::parse(modern).unwrap();
         assert_eq!(info.entries()[0].purpose(), Some("emergency-CallId"));
     }
 
     #[test]
     fn filter_entries_by_param() {
-        let info = SipCallInfo::parse(SAMPLE_EMERGENCY).unwrap();
+        let info = UriInfo::parse(SAMPLE_EMERGENCY).unwrap();
         let adr: Vec<_> = info
             .entries()
             .iter()
@@ -461,7 +466,7 @@ mod tests {
 
     #[test]
     fn metadata_param_lookup() {
-        let info = SipCallInfo::parse(SAMPLE_WITH_SITE).unwrap();
+        let info = UriInfo::parse(SAMPLE_WITH_SITE).unwrap();
         assert_eq!(info.entries()[0].param("site"), Some("bcf.example.com"));
         assert_eq!(info.entries()[0].param("purpose"), Some("emergency-CallId"));
         assert!(info.entries()[1]
@@ -472,13 +477,13 @@ mod tests {
     #[test]
     fn display_roundtrip() {
         let raw = "<urn:example:test>;purpose=test-purpose;site=example.com";
-        let info = SipCallInfo::parse(raw).unwrap();
+        let info = UriInfo::parse(raw).unwrap();
         assert_eq!(info.to_string(), raw);
     }
 
     #[test]
     fn display_comma_count_matches_entries() {
-        let info = SipCallInfo::parse(SAMPLE_EMERGENCY).unwrap();
+        let info = UriInfo::parse(SAMPLE_EMERGENCY).unwrap();
         let s = info.to_string();
         assert_eq!(
             s.matches(',')
@@ -490,9 +495,6 @@ mod tests {
 
     #[test]
     fn empty_input() {
-        assert!(matches!(
-            SipCallInfo::parse(""),
-            Err(SipCallInfoError::Empty)
-        ));
+        assert!(matches!(UriInfo::parse(""), Err(UriInfoError::Empty)));
     }
 }

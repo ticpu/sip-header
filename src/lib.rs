@@ -10,7 +10,7 @@
 //! - [`header_addr`] — RFC 3261 `name-addr` with header-level parameters
 //! - [`header`] — SIP header name catalog and [`SipHeaderLookup`] trait
 //! - [`message`] — Extract headers and Request-URI from raw SIP message text (feature: `message`)
-//! - [`call_info`] — RFC 3261 §20.9 Call-Info header parser
+//! - [`uri_info`] — `<absoluteURI> *(SEMI generic-param)` parser (Call-Info, Alert-Info, Error-Info)
 //! - [`history_info`] — RFC 7044 History-Info header parser
 //! - [`geolocation`] — RFC 6442 Geolocation header parser
 //! - `conference_info` — RFC 4575 conference event package (feature: `conference-info`)
@@ -20,7 +20,6 @@ mod macros;
 
 pub use sip_uri;
 
-pub mod call_info;
 #[cfg(feature = "conference-info")]
 pub mod conference_info;
 pub mod geolocation;
@@ -29,14 +28,15 @@ pub mod header_addr;
 pub mod history_info;
 #[cfg(feature = "message")]
 pub mod message;
+pub mod uri_info;
 
-pub use call_info::{SipCallInfo, SipCallInfoEntry, SipCallInfoError};
 pub use geolocation::{SipGeolocation, SipGeolocationRef};
 pub use header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};
 pub use header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 pub use history_info::{HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason};
 #[cfg(feature = "message")]
 pub use message::{extract_header, extract_request_uri};
+pub use uri_info::{UriInfo, UriInfoEntry, UriInfoError};
 
 /// Format a slice of displayable items as a separated list.
 pub(crate) fn fmt_joined<T: std::fmt::Display>(

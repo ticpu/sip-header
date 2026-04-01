@@ -4,9 +4,9 @@
 //! plus a [`SipHeaderLookup`] trait providing typed convenience accessors for
 //! any key-value store that can look up headers by name.
 
-use crate::call_info::{SipCallInfo, SipCallInfoError};
 use crate::header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 use crate::history_info::{HistoryInfo, HistoryInfoError};
+use crate::uri_info::{UriInfo, UriInfoError};
 
 /// Error returned when parsing an unrecognized SIP header name.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -483,12 +483,12 @@ pub trait SipHeaderLookup {
         self.sip_header_all_str(name.as_str())
     }
 
-    /// Parse the `Call-Info` header into a [`SipCallInfo`].
+    /// Parse the `Call-Info` header into a [`UriInfo`].
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
-    fn call_info(&self) -> Result<Option<SipCallInfo>, SipCallInfoError> {
+    fn call_info(&self) -> Result<Option<UriInfo>, UriInfoError> {
         match self.sip_header(SipHeader::CallInfo) {
-            Some(s) => SipCallInfo::parse(s).map(Some),
+            Some(s) => UriInfo::parse(s).map(Some),
             None => Ok(None),
         }
     }

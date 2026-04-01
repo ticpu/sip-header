@@ -396,11 +396,11 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
 
     #[test]
     fn extract_and_parse_call_info() {
-        use crate::call_info::SipCallInfo;
+        use crate::uri_info::UriInfo;
 
         let raw = extract_header(NG911_INVITE, "Call-Info");
         assert_eq!(raw.len(), 1);
-        let ci = SipCallInfo::parse(&raw[0]).unwrap();
+        let ci = UriInfo::parse(&raw[0]).unwrap();
         assert_eq!(ci.len(), 2);
         assert_eq!(ci.entries()[0].purpose(), Some("emergency-CallId"));
         assert!(ci

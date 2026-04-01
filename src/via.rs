@@ -68,24 +68,24 @@ impl SipViaEntry {
     }
 
     /// Returns a specific parameter value by key (case-insensitive).
-    pub fn param(&self, key: &str) -> Option<&Option<String>> {
+    pub fn param(&self, key: &str) -> Option<Option<&str>> {
         let key_lower = key.to_ascii_lowercase();
         self.params
             .iter()
             .find(|(k, _)| k == &key_lower)
-            .map(|(_, v)| v)
+            .map(|(_, v)| v.as_deref())
     }
 
     /// Returns the `branch` parameter value, if present.
     pub fn branch(&self) -> Option<&str> {
         self.param("branch")
-            .and_then(|v| v.as_deref())
+            .flatten()
     }
 
     /// Returns the `received` parameter value, if present.
     pub fn received(&self) -> Option<&str> {
         self.param("received")
-            .and_then(|v| v.as_deref())
+            .flatten()
     }
 
     /// Returns the `rport` parameter.
@@ -524,8 +524,8 @@ mod tests {
     fn test_param_case_insensitive() {
         let via = SipVia::parse("SIP/2.0/UDP 198.51.100.1:5060;Branch=test").unwrap();
         let entry = &via.entries()[0];
-        assert_eq!(entry.param("branch"), Some(&Some("test".to_string())));
-        assert_eq!(entry.param("BRANCH"), Some(&Some("test".to_string())));
+        assert_eq!(entry.param("branch"), Some(Some("test")));
+        assert_eq!(entry.param("BRANCH"), Some(Some("test")));
     }
 
     #[test]

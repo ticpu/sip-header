@@ -4,10 +4,17 @@
 //! plus a [`SipHeaderLookup`] trait providing typed convenience accessors for
 //! any key-value store that can look up headers by name.
 
+use crate::accept::{SipAccept, SipAcceptError};
+use crate::accept_encoding::{SipAcceptEncoding, SipAcceptEncodingError};
+use crate::accept_language::{SipAcceptLanguage, SipAcceptLanguageError};
+use crate::auth::{SipAuthError, SipAuthValue};
 use crate::contact::ContactValue;
 use crate::header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 use crate::history_info::{HistoryInfo, HistoryInfoError};
+use crate::security::{SipSecurity, SipSecurityError};
 use crate::uri_info::{UriInfo, UriInfoError};
+use crate::via::{SipVia, SipViaError};
+use crate::warning::{SipWarning, SipWarningError};
 
 /// Error returned when parsing an unrecognized SIP header name.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -607,6 +614,105 @@ pub trait SipHeaderLookup {
     /// `In-Reply-To` values as individual Call-ID tokens (RFC 3261 §20.21).
     fn in_reply_to(&self) -> Vec<&str> {
         split_trim(self.sip_header(SipHeader::InReplyTo))
+    }
+
+    /// Parse `Via` into a [`SipVia`] (RFC 3261 §20.42).
+    fn via(&self) -> Result<Option<SipVia>, SipViaError> {
+        match self.sip_header(SipHeader::Via) {
+            Some(s) => SipVia::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Authorization` into a list of [`SipAuthValue`] (RFC 3261 §20.7).
+    ///
+    /// Auth headers MUST NOT be comma-combined (RFC 3261 §7.3.1), so each
+    /// occurrence is parsed separately via [`sip_header_all`](SipHeaderLookup::sip_header_all).
+    fn authorization(&self) -> Result<Vec<SipAuthValue>, SipAuthError> {
+        self.sip_header_all(SipHeader::Authorization)
+            .into_iter()
+            .map(|s| s.parse::<SipAuthValue>())
+            .collect()
+    }
+
+    /// Parse `Proxy-Authorization` into a list of [`SipAuthValue`] (RFC 3261 §20.28).
+    fn proxy_authorization(&self) -> Result<Vec<SipAuthValue>, SipAuthError> {
+        self.sip_header_all(SipHeader::ProxyAuthorization)
+            .into_iter()
+            .map(|s| s.parse::<SipAuthValue>())
+            .collect()
+    }
+
+    /// Parse `WWW-Authenticate` into a list of [`SipAuthValue`] (RFC 3261 §20.44).
+    fn www_authenticate(&self) -> Result<Vec<SipAuthValue>, SipAuthError> {
+        self.sip_header_all(SipHeader::WwwAuthenticate)
+            .into_iter()
+            .map(|s| s.parse::<SipAuthValue>())
+            .collect()
+    }
+
+    /// Parse `Proxy-Authenticate` into a list of [`SipAuthValue`] (RFC 3261 §20.27).
+    fn proxy_authenticate(&self) -> Result<Vec<SipAuthValue>, SipAuthError> {
+        self.sip_header_all(SipHeader::ProxyAuthenticate)
+            .into_iter()
+            .map(|s| s.parse::<SipAuthValue>())
+            .collect()
+    }
+
+    /// Parse `Warning` into a [`SipWarning`] (RFC 3261 §20.43).
+    fn warning(&self) -> Result<Option<SipWarning>, SipWarningError> {
+        match self.sip_header(SipHeader::Warning) {
+            Some(s) => SipWarning::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Security-Client` into a [`SipSecurity`] (RFC 3329).
+    fn security_client(&self) -> Result<Option<SipSecurity>, SipSecurityError> {
+        match self.sip_header(SipHeader::SecurityClient) {
+            Some(s) => SipSecurity::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Security-Server` into a [`SipSecurity`] (RFC 3329).
+    fn security_server(&self) -> Result<Option<SipSecurity>, SipSecurityError> {
+        match self.sip_header(SipHeader::SecurityServer) {
+            Some(s) => SipSecurity::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Security-Verify` into a [`SipSecurity`] (RFC 3329).
+    fn security_verify(&self) -> Result<Option<SipSecurity>, SipSecurityError> {
+        match self.sip_header(SipHeader::SecurityVerify) {
+            Some(s) => SipSecurity::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Accept` into a [`SipAccept`] (RFC 3261 §20.1).
+    fn accept(&self) -> Result<Option<SipAccept>, SipAcceptError> {
+        match self.sip_header(SipHeader::Accept) {
+            Some(s) => SipAccept::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Accept-Encoding` into a [`SipAcceptEncoding`] (RFC 3261 §20.2).
+    fn accept_encoding(&self) -> Result<Option<SipAcceptEncoding>, SipAcceptEncodingError> {
+        match self.sip_header(SipHeader::AcceptEncoding) {
+            Some(s) => SipAcceptEncoding::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Accept-Language` into a [`SipAcceptLanguage`] (RFC 3261 §20.3).
+    fn accept_language(&self) -> Result<Option<SipAcceptLanguage>, SipAcceptLanguageError> {
+        match self.sip_header(SipHeader::AcceptLanguage) {
+            Some(s) => SipAcceptLanguage::parse(s).map(Some),
+            None => Ok(None),
+        }
     }
 
     /// Parse `Diversion` into a list of [`SipHeaderAddr`] (draft-levy-sip-diversion-08).
@@ -1226,6 +1332,104 @@ mod tests {
         let calls = h.in_reply_to();
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[0], "call1@example.com");
+    }
+
+    #[test]
+    fn via_accessor() {
+        let h = headers_with(&[("Via", "SIP/2.0/UDP 198.51.100.1:5060;branch=z9hG4bK776")]);
+        let via = h
+            .via()
+            .unwrap()
+            .unwrap();
+        assert_eq!(via.len(), 1);
+        assert_eq!(via.entries()[0].transport(), "UDP");
+        assert_eq!(via.entries()[0].host(), "198.51.100.1");
+    }
+
+    #[test]
+    fn authorization_accessor() {
+        let h = headers_with(&[(
+            "Authorization",
+            "Digest username=\"alice\", realm=\"example.com\", nonce=\"abc123\"",
+        )]);
+        let auth = h
+            .authorization()
+            .unwrap();
+        assert_eq!(auth.len(), 1);
+        assert_eq!(auth[0].scheme(), "Digest");
+        assert_eq!(auth[0].username(), Some("alice"));
+        assert_eq!(auth[0].realm(), Some("example.com"));
+    }
+
+    #[test]
+    fn www_authenticate_accessor() {
+        let h = headers_with(&[(
+            "WWW-Authenticate",
+            "Digest realm=\"example.com\", nonce=\"xyz789\"",
+        )]);
+        let challenges = h
+            .www_authenticate()
+            .unwrap();
+        assert_eq!(challenges.len(), 1);
+        assert_eq!(challenges[0].realm(), Some("example.com"));
+    }
+
+    #[test]
+    fn warning_accessor() {
+        let h = headers_with(&[(
+            "Warning",
+            "301 198.51.100.1 \"Incompatible network protocol\"",
+        )]);
+        let w = h
+            .warning()
+            .unwrap()
+            .unwrap();
+        assert_eq!(w.len(), 1);
+        assert_eq!(w.entries()[0].code(), 301);
+    }
+
+    #[test]
+    fn security_client_accessor() {
+        let h = headers_with(&[("Security-Client", "tls;q=0.2, digest;d-qop=auth;q=0.1")]);
+        let sec = h
+            .security_client()
+            .unwrap()
+            .unwrap();
+        assert_eq!(sec.len(), 2);
+        assert_eq!(sec.entries()[0].mechanism(), "tls");
+    }
+
+    #[test]
+    fn accept_accessor() {
+        let h = headers_with(&[("Accept", "application/sdp, application/pidf+xml;q=0.5")]);
+        let accept = h
+            .accept()
+            .unwrap()
+            .unwrap();
+        assert_eq!(accept.len(), 2);
+        assert_eq!(accept.entries()[0].media_range(), "application/sdp");
+    }
+
+    #[test]
+    fn accept_encoding_accessor() {
+        let h = headers_with(&[("Accept-Encoding", "gzip;q=1.0, identity;q=0.5")]);
+        let ae = h
+            .accept_encoding()
+            .unwrap()
+            .unwrap();
+        assert_eq!(ae.len(), 2);
+        assert_eq!(ae.entries()[0].encoding(), "gzip");
+    }
+
+    #[test]
+    fn accept_language_accessor() {
+        let h = headers_with(&[("Accept-Language", "en;q=0.9, fr;q=0.8")]);
+        let al = h
+            .accept_language()
+            .unwrap()
+            .unwrap();
+        assert_eq!(al.len(), 2);
+        assert_eq!(al.entries()[0].language(), "en");
     }
 }
 

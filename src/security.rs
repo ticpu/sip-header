@@ -1,0 +1,254 @@
+//! SIP Security mechanism parser (RFC 3329).
+//!
+//! Used by Security-Client, Security-Server, and Security-Verify headers.
+
+use std::fmt;
+
+/// A parsed security mechanism entry: `mechanism-name *(SEMI mech-params)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SipSecurityMechanism {
+    mechanism: String,
+    params: Vec<(String, Option<String>)>,
+}
+
+impl SipSecurityMechanism {
+    /// The mechanism name (e.g. `"digest"`, `"tls"`, `"ipsec-ike"`).
+    pub fn mechanism(&self) -> &str {
+        &self.mechanism
+    }
+
+    /// All parameters as `(key, optional_value)` pairs.
+    pub fn params(&self) -> &[(String, Option<String>)] {
+        &self.params
+    }
+
+    /// Look up a parameter by key (case-insensitive).
+    pub fn param(&self, key: &str) -> Option<Option<&str>> {
+        self.params
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(key))
+            .map(|(_, v)| v.as_deref())
+    }
+
+    /// The `q` preference value, if present.
+    pub fn q(&self) -> Option<&str> {
+        self.param("q")
+            .flatten()
+    }
+
+    /// The `d-alg` parameter, if present.
+    pub fn d_alg(&self) -> Option<&str> {
+        self.param("d-alg")
+            .flatten()
+    }
+
+    /// The `d-qop` parameter, if present.
+    pub fn d_qop(&self) -> Option<&str> {
+        self.param("d-qop")
+            .flatten()
+    }
+}
+
+impl fmt::Display for SipSecurityMechanism {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.mechanism)?;
+        for (key, value) in &self.params {
+            match value {
+                Some(v) => write!(f, ";{key}={v}")?,
+                None => write!(f, ";{key}")?,
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Errors from parsing a security mechanism header value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SipSecurityError {
+    /// The input string was empty or whitespace-only.
+    Empty,
+    /// A mechanism entry could not be parsed.
+    InvalidFormat(String),
+}
+
+impl fmt::Display for SipSecurityError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => write!(f, "empty security mechanism value"),
+            Self::InvalidFormat(raw) => {
+                write!(f, "invalid security mechanism: {raw}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for SipSecurityError {}
+
+fn parse_mechanism(raw: &str) -> Result<SipSecurityMechanism, SipSecurityError> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Err(SipSecurityError::InvalidFormat(raw.to_string()));
+    }
+
+    let (mechanism_part, params_part) = match raw.split_once(';') {
+        Some((m, p)) => (m.trim(), Some(p)),
+        None => (raw, None),
+    };
+
+    if mechanism_part.is_empty() {
+        return Err(SipSecurityError::InvalidFormat(raw.to_string()));
+    }
+
+    let mechanism = mechanism_part.to_ascii_lowercase();
+    let mut params = Vec::new();
+
+    if let Some(params_str) = params_part {
+        for segment in params_str.split(';') {
+            let segment = segment.trim();
+            if segment.is_empty() {
+                continue;
+            }
+            if let Some((key, value)) = segment.split_once('=') {
+                params.push((
+                    key.trim()
+                        .to_ascii_lowercase(),
+                    Some(
+                        value
+                            .trim()
+                            .trim_matches('"')
+                            .to_string(),
+                    ),
+                ));
+            } else {
+                params.push((segment.to_ascii_lowercase(), None));
+            }
+        }
+    }
+
+    Ok(SipSecurityMechanism { mechanism, params })
+}
+
+/// Parsed security mechanism header value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SipSecurity(Vec<SipSecurityMechanism>);
+
+impl SipSecurity {
+    /// Parse a comma-separated security mechanism value.
+    pub fn parse(raw: &str) -> Result<Self, SipSecurityError> {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            return Err(SipSecurityError::Empty);
+        }
+        let entries: Vec<_> = crate::split_comma_entries(raw)
+            .into_iter()
+            .map(parse_mechanism)
+            .collect::<Result<_, _>>()?;
+        if entries.is_empty() {
+            return Err(SipSecurityError::Empty);
+        }
+        Ok(Self(entries))
+    }
+
+    /// The parsed entries as a slice.
+    pub fn entries(&self) -> &[SipSecurityMechanism] {
+        &self.0
+    }
+
+    /// Consume self and return entries as a `Vec`.
+    pub fn into_entries(self) -> Vec<SipSecurityMechanism> {
+        self.0
+    }
+
+    /// Number of entries.
+    pub fn len(&self) -> usize {
+        self.0
+            .len()
+    }
+
+    /// Returns `true` if there are no entries.
+    pub fn is_empty(&self) -> bool {
+        self.0
+            .is_empty()
+    }
+}
+
+impl fmt::Display for SipSecurity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        crate::fmt_joined(f, &self.0, ", ")
+    }
+}
+
+impl<'a> IntoIterator for &'a SipSecurity {
+    type Item = &'a SipSecurityMechanism;
+    type IntoIter = std::slice::Iter<'a, SipSecurityMechanism>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0
+            .iter()
+    }
+}
+
+impl IntoIterator for SipSecurity {
+    type Item = SipSecurityMechanism;
+    type IntoIter = std::vec::IntoIter<SipSecurityMechanism>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0
+            .into_iter()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn single_mechanism() {
+        let sec = SipSecurity::parse("digest;d-qop=auth-int;q=0.1").unwrap();
+        assert_eq!(sec.len(), 1);
+        assert_eq!(sec.entries()[0].mechanism(), "digest");
+        assert_eq!(sec.entries()[0].d_qop(), Some("auth-int"));
+        assert_eq!(sec.entries()[0].q(), Some("0.1"));
+    }
+
+    #[test]
+    fn multiple_mechanisms() {
+        let sec = SipSecurity::parse("tls;q=0.2, digest;d-qop=auth;q=0.1").unwrap();
+        assert_eq!(sec.len(), 2);
+        assert_eq!(sec.entries()[0].mechanism(), "tls");
+        assert_eq!(sec.entries()[1].mechanism(), "digest");
+    }
+
+    #[test]
+    fn mechanism_no_params() {
+        let sec = SipSecurity::parse("tls").unwrap();
+        assert_eq!(sec.len(), 1);
+        assert_eq!(sec.entries()[0].mechanism(), "tls");
+        assert!(sec.entries()[0]
+            .params()
+            .is_empty());
+    }
+
+    #[test]
+    fn empty_input() {
+        assert!(matches!(
+            SipSecurity::parse(""),
+            Err(SipSecurityError::Empty)
+        ));
+    }
+
+    #[test]
+    fn display_roundtrip() {
+        let raw = "digest;d-qop=auth;q=0.1";
+        let sec = SipSecurity::parse(raw).unwrap();
+        assert_eq!(sec.to_string(), raw);
+    }
+
+    #[test]
+    fn d_alg_param() {
+        let sec = SipSecurity::parse("digest;d-alg=MD5;d-qop=auth").unwrap();
+        assert_eq!(sec.entries()[0].d_alg(), Some("MD5"));
+    }
+}

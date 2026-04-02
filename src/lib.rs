@@ -3,19 +3,24 @@
 //! This crate provides parsers for SIP header values as defined in RFC 3261
 //! and extensions. It sits between URI parsing ([`sip_uri`]) and full SIP
 //! stacks, handling the header-level grammar: display names, header parameters,
-//! and structured header values like Call-Info and History-Info.
+//! and structured header values.
 //!
 //! # Modules
 //!
 //! - [`header_addr`] — RFC 3261 `name-addr` with header-level parameters
 //! - [`header`] — SIP header name catalog and [`SipHeaderLookup`] trait
 //! - [`message`] — Extract headers and Request-URI from raw SIP message text (feature: `message`)
+//! - [`via`] — RFC 3261 Via header parser
+//! - [`warning`] — RFC 3261 Warning header parser
+//! - [`auth`] — SIP authentication value parser (Authorization, WWW-Authenticate, etc.)
+//! - [`contact`] — RFC 3261 Contact header parser
+//! - [`accept`] — RFC 3261 Accept header parser
+//! - [`accept_encoding`] — RFC 3261 Accept-Encoding header parser
+//! - [`accept_language`] — RFC 3261 Accept-Language header parser
+//! - [`security`] — RFC 3329 Security mechanism parser
 //! - [`uri_info`] — `<absoluteURI> *(SEMI generic-param)` parser (Call-Info, Alert-Info, Error-Info)
 //! - [`history_info`] — RFC 7044 History-Info header parser
 //! - [`geolocation`] — RFC 6442 Geolocation header parser
-//! - [`auth`] — SIP authentication value parser (Authorization, WWW-Authenticate, etc.)
-//! - [`warning`] — RFC 3261 Warning header parser
-//! - [`via`] — RFC 3261 Via header parser
 //! - `conference_info` — RFC 4575 conference event package (feature: `conference-info`)
 
 #[macro_use]

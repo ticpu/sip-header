@@ -1,8 +1,7 @@
 # sip-header
 
-SIP header field parsers for Rust. RFC 3261 name-addr, Call-Info,
-History-Info (RFC 7044), Geolocation (RFC 6442), and conference-info
-(RFC 4575).
+SIP header field parsers for Rust. Via, Warning, Auth, Accept, Contact,
+Call-Info, History-Info, Geolocation, Security, and full IANA header catalog.
 
 [![CI](https://github.com/ticpu/sip-header/actions/workflows/ci.yml/badge.svg)](https://github.com/ticpu/sip-header/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/sip-header.svg)](https://crates.io/crates/sip-header)
@@ -35,16 +34,16 @@ assert_eq!(addr.tag(), Some("abc123"));
 assert_eq!(addr.sip_uri().unwrap().user(), Some("+15551234567"));
 ```
 
-## SipCallInfo — RFC 3261 §20.9
+## UriInfo — Call-Info / Alert-Info / Error-Info
 
-Parses Call-Info headers with URI + parameter entries:
+Parses `<absoluteURI> *(SEMI generic-param)` headers:
 
 ```rust
-use sip_header::SipCallInfo;
+use sip_header::UriInfo;
 
 let raw = "<urn:emergency:uid:callid:abc:bcf.example.com>;purpose=emergency-CallId,\
            <https://adr.example.com/info>;purpose=EmergencyCallData.ProviderInfo";
-let ci = SipCallInfo::parse(raw).unwrap();
+let ci = UriInfo::parse(raw).unwrap();
 assert_eq!(ci.len(), 2);
 assert_eq!(ci.entries()[0].purpose(), Some("emergency-CallId"));
 ```
@@ -109,7 +108,15 @@ assert_eq!(SipHeader::parse_name("v"), Ok(SipHeader::Via));
 | `header_addr` | RFC 3261 `name-addr` with header-level parameters |
 | `header` | `SipHeader` enum, `SipHeaderLookup` trait |
 | `message` | Extract headers from raw SIP message text |
-| `call_info` | RFC 3261 §20.9 Call-Info parser |
+| `via` | RFC 3261 Via header parser |
+| `warning` | RFC 3261 Warning header parser |
+| `auth` | SIP authentication (Authorization, WWW-Authenticate, etc.) |
+| `contact` | RFC 3261 Contact header parser |
+| `accept` | RFC 3261 Accept header parser |
+| `accept_encoding` | RFC 3261 Accept-Encoding header parser |
+| `accept_language` | RFC 3261 Accept-Language header parser |
+| `security` | RFC 3329 Security-Client/Server/Verify |
+| `uri_info` | Call-Info, Alert-Info, Error-Info (URI + params) |
 | `history_info` | RFC 7044 History-Info with RFC 3326 Reason |
 | `geolocation` | RFC 6442 Geolocation header |
 | `conference_info` | RFC 4575 conference event XML (feature: `conference-info`) |
@@ -133,9 +140,11 @@ This crate is part of a Rust SIP/NG9-1-1 ecosystem:
 
 ## RFC coverage
 
-- **RFC 3261** — SIP name-addr, Call-Info, core header catalog
+- **RFC 3261** — Via, Warning, Contact, Accept, Accept-Encoding, Accept-Language, name-addr, Call-Info, core header catalog
+- **RFC 2617** — Digest authentication (Authorization, WWW-Authenticate)
 - **RFC 3325** — P-Asserted-Identity, P-Preferred-Identity
 - **RFC 3326** — Reason header (embedded in History-Info)
+- **RFC 3329** — Security mechanism (Security-Client/Server/Verify)
 - **RFC 4575** — Conference event package XML (feature-gated)
 - **RFC 6442** — Geolocation header
 - **RFC 7044** — History-Info header

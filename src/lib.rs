@@ -75,6 +75,60 @@ pub(crate) fn fmt_joined<T: std::fmt::Display>(
     Ok(())
 }
 
+/// Unescape RFC 3261 §25.1 `quoted-pair` sequences: `\"` → `"`, `\\` → `\`.
+///
+/// Operates on the content *between* surrounding double-quotes (caller strips
+/// them). Skips allocation when no backslash escapes are present.
+pub(crate) fn unescape_quoted_pair(s: &str) -> String {
+    if !s.contains('\\') {
+        return s.to_string();
+    }
+    let mut result = String::with_capacity(s.len());
+    let mut escaped = false;
+    for ch in s.chars() {
+        if escaped {
+            result.push(ch);
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
+/// Escape a string for use inside a `quoted-string` (RFC 3261 §25.1).
+///
+/// Escapes `"` → `\"` and `\` → `\\`. Does **not** add surrounding quotes.
+pub(crate) fn escape_quoted_pair(s: &str) -> String {
+    if !s.contains(['"', '\\']) {
+        return s.to_string();
+    }
+    let mut result = String::with_capacity(s.len() + 4);
+    for ch in s.chars() {
+        if ch == '"' || ch == '\\' {
+            result.push('\\');
+        }
+        result.push(ch);
+    }
+    result
+}
+
+/// Write a `quoted-string` to a formatter: surrounds with `"` and escapes
+/// embedded quotes/backslashes per RFC 3261 §25.1.
+pub(crate) fn write_quoted_pair(f: &mut std::fmt::Formatter<'_>, value: &str) -> std::fmt::Result {
+    f.write_str("\"")?;
+    for ch in value.chars() {
+        if ch == '"' || ch == '\\' {
+            write!(f, "\\{ch}")?;
+        } else {
+            write!(f, "{ch}")?;
+        }
+    }
+    f.write_str("\"")
+}
+
 /// Split comma-separated header entries respecting angle-bracket nesting
 /// and double-quoted strings.
 ///

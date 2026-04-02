@@ -1,7 +1,6 @@
 //! SIP Accept-Encoding header parser (RFC 3261 §20.2).
 
 use std::fmt;
-use std::str::FromStr;
 
 /// A single Accept-Encoding entry: `encoding *(SEMI accept-param)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,13 +158,7 @@ impl fmt::Display for SipAcceptEncoding {
     }
 }
 
-impl FromStr for SipAcceptEncoding {
-    type Err = SipAcceptEncodingError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
+impl_from_str_via_parse!(SipAcceptEncoding, SipAcceptEncodingError);
 
 impl<'a> IntoIterator for &'a SipAcceptEncoding {
     type Item = &'a SipAcceptEncodingEntry;

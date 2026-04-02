@@ -1,7 +1,6 @@
 //! SIP Via header parser (RFC 3261 §20.42).
 
 use std::fmt;
-use std::str::FromStr;
 
 /// Error parsing a SIP Via header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -290,13 +289,7 @@ impl fmt::Display for SipVia {
     }
 }
 
-impl FromStr for SipVia {
-    type Err = SipViaError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
+impl_from_str_via_parse!(SipVia, SipViaError);
 
 impl IntoIterator for SipVia {
     type Item = SipViaEntry;

@@ -3,7 +3,6 @@
 //! Used by Security-Client, Security-Server, and Security-Verify headers.
 
 use std::fmt;
-use std::str::FromStr;
 
 /// A parsed security mechanism entry: `mechanism-name *(SEMI mech-params)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -182,13 +181,7 @@ impl fmt::Display for SipSecurity {
     }
 }
 
-impl FromStr for SipSecurity {
-    type Err = SipSecurityError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
+impl_from_str_via_parse!(SipSecurity, SipSecurityError);
 
 impl<'a> IntoIterator for &'a SipSecurity {
     type Item = &'a SipSecurityMechanism;

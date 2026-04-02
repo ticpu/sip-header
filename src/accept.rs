@@ -1,7 +1,6 @@
 //! SIP Accept header parser (RFC 3261 §20.1).
 
 use std::fmt;
-use std::str::FromStr;
 
 /// A single Accept entry: `type/subtype *(SEMI accept-param)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,13 +183,7 @@ impl fmt::Display for SipAccept {
     }
 }
 
-impl FromStr for SipAccept {
-    type Err = SipAcceptError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
+impl_from_str_via_parse!(SipAccept, SipAcceptError);
 
 impl<'a> IntoIterator for &'a SipAccept {
     type Item = &'a SipAcceptEntry;

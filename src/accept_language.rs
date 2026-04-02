@@ -1,7 +1,6 @@
 //! SIP Accept-Language header parser (RFC 3261 §20.3).
 
 use std::fmt;
-use std::str::FromStr;
 
 /// A single Accept-Language entry: `language-range *(SEMI accept-param)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,13 +158,7 @@ impl fmt::Display for SipAcceptLanguage {
     }
 }
 
-impl FromStr for SipAcceptLanguage {
-    type Err = SipAcceptLanguageError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
+impl_from_str_via_parse!(SipAcceptLanguage, SipAcceptLanguageError);
 
 impl<'a> IntoIterator for &'a SipAcceptLanguage {
     type Item = &'a SipAcceptLanguageEntry;

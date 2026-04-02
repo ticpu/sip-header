@@ -1,7 +1,6 @@
 //! SIP Warning header parser (RFC 3261 §20.43).
 
 use std::fmt;
-use std::str::FromStr;
 
 /// Error parsing a SIP Warning header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,12 +127,12 @@ impl fmt::Display for SipWarningEntry {
             "{:03} {} \"{}\"",
             self.code,
             self.agent,
-            escape_quoted_string(&self.text)
+            crate::escape_quoted_pair(&self.text)
         )
     }
 }
 
-/// Parse a quoted string starting with '"'.
+/// Parse a quoted string starting with `"`, returning the unescaped content.
 fn parse_quoted_string(s: &str) -> Result<String, SipWarningError> {
     let s = s.trim_start();
     if !s.starts_with('"') {
@@ -142,37 +141,22 @@ fn parse_quoted_string(s: &str) -> Result<String, SipWarningError> {
         ));
     }
 
-    let mut result = String::new();
-    let chars = s[1..].chars();
+    // Find the closing quote, respecting backslash escapes.
+    let content = &s[1..];
     let mut escaped = false;
-
-    for c in chars {
+    for (i, c) in content.char_indices() {
         if escaped {
-            result.push(c);
             escaped = false;
         } else if c == '\\' {
             escaped = true;
         } else if c == '"' {
-            return Ok(result);
-        } else {
-            result.push(c);
+            return Ok(crate::unescape_quoted_pair(&content[..i]));
         }
     }
 
     Err(SipWarningError::InvalidFormat(
         "unterminated quoted string".to_string(),
     ))
-}
-
-/// Escape a string for use in a quoted-string.
-fn escape_quoted_string(s: &str) -> String {
-    s.chars()
-        .flat_map(|c| match c {
-            '"' => vec!['\\', '"'],
-            '\\' => vec!['\\', '\\'],
-            _ => vec![c],
-        })
-        .collect()
 }
 
 /// SIP Warning header.
@@ -236,13 +220,7 @@ impl fmt::Display for SipWarning {
     }
 }
 
-impl FromStr for SipWarning {
-    type Err = SipWarningError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
+impl_from_str_via_parse!(SipWarning, SipWarningError);
 
 impl IntoIterator for SipWarning {
     type Item = SipWarningEntry;

@@ -1,7 +1,6 @@
 //! SIP authentication value parser (RFC 3261 §20.7, §20.27, §20.28, §20.44).
 
 use std::fmt;
-use std::str::FromStr;
 
 /// Error type for SIP authentication value parsing.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,43 +91,9 @@ impl SipAuthValue {
     }
 }
 
-/// Split auth params on commas, respecting double-quoted strings.
-///
-/// RFC 3261 §22.4: `auth-param` values may be `quoted-string`, which can
-/// contain commas. This splitter tracks quote state (including backslash
-/// escapes per RFC 3261 §25.1 `quoted-pair`) to avoid splitting inside
-/// quoted values.
-fn split_auth_params(s: &str) -> Vec<&str> {
-    let mut entries = Vec::new();
-    let mut start = 0;
-    let mut in_quotes = false;
-    let mut prev_backslash = false;
-
-    for (i, ch) in s.char_indices() {
-        if prev_backslash {
-            prev_backslash = false;
-            continue;
-        }
-        match ch {
-            '\\' if in_quotes => prev_backslash = true,
-            '"' => in_quotes = !in_quotes,
-            ',' if !in_quotes => {
-                entries.push(&s[start..i]);
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    if start <= s.len() {
-        entries.push(&s[start..]);
-    }
-    entries
-}
-
-impl FromStr for SipAuthValue {
-    type Err = SipAuthError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl SipAuthValue {
+    /// Parse an authentication header value.
+    pub fn parse(s: &str) -> Result<Self, SipAuthError> {
         let s = s.trim();
         if s.is_empty() {
             return Err(SipAuthError::Empty);
@@ -148,7 +113,7 @@ impl FromStr for SipAuthValue {
 
         let mut params = Vec::new();
 
-        for param_str in split_auth_params(rest) {
+        for param_str in crate::split_comma_entries(rest) {
             let param_str = param_str.trim();
             if param_str.is_empty() {
                 continue;
@@ -168,7 +133,7 @@ impl FromStr for SipAuthValue {
 
             // Strip quotes and unescape quoted-pair sequences (RFC 3261 §25.1)
             let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
-                unquote(&value[1..value.len() - 1])
+                crate::unescape_quoted_pair(&value[1..value.len() - 1])
             } else {
                 value.to_string()
             };
@@ -183,22 +148,7 @@ impl FromStr for SipAuthValue {
     }
 }
 
-/// Unescape `quoted-pair` sequences: `\"` → `"`, `\\` → `\` (RFC 3261 §25.1).
-fn unquote(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut escaped = false;
-    for ch in s.chars() {
-        if escaped {
-            result.push(ch);
-            escaped = false;
-        } else if ch == '\\' {
-            escaped = true;
-        } else {
-            result.push(ch);
-        }
-    }
-    result
-}
+impl_from_str_via_parse!(SipAuthValue, SipAuthError);
 
 /// RFC 2617 §3.2.1/§3.2.2 params that MUST use quoted-string on the wire.
 ///
@@ -210,18 +160,6 @@ fn unquote(s: &str) -> String {
 const MUST_QUOTE_PARAMS: &[&str] = &[
     "realm", "domain", "nonce", "opaque", "username", "uri", "response", "cnonce",
 ];
-
-fn write_quoted(f: &mut fmt::Formatter<'_>, value: &str) -> fmt::Result {
-    f.write_str("\"")?;
-    for ch in value.chars() {
-        if ch == '"' || ch == '\\' {
-            write!(f, "\\{ch}")?;
-        } else {
-            write!(f, "{ch}")?;
-        }
-    }
-    f.write_str("\"")
-}
 
 impl fmt::Display for SipAuthValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -246,7 +184,7 @@ impl fmt::Display for SipAuthValue {
                     || value.is_empty()
                 {
                     write!(f, "{key}=")?;
-                    write_quoted(f, value)?;
+                    crate::write_quoted_pair(f, value)?;
                 } else {
                     write!(f, "{key}={value}")?;
                 }

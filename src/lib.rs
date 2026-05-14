@@ -56,7 +56,7 @@ pub use header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};
 pub use header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 pub use history_info::{HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason};
 #[cfg(feature = "message")]
-pub use message::{extract_header, extract_request_uri};
+pub use message::{extract_all_headers, extract_header, extract_request_uri};
 pub use security::{SipSecurity, SipSecurityError, SipSecurityMechanism};
 pub use uri_info::{UriInfo, UriInfoEntry, UriInfoError};
 pub use via::{SipVia, SipViaEntry, SipViaError};

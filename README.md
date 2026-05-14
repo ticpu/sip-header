@@ -101,6 +101,24 @@ assert_eq!(SipHeader::parse_name("v"), Ok(SipHeader::Via));
 `extract_header()` matches both forms transparently — searching for
 `"From"` also matches `f:` lines, and vice versa.
 
+### Bulk extraction
+
+`extract_all_headers()` returns all headers as name-value tuples in wire
+order, with proper RFC 3261 §7.3.1 folding. Header names are returned
+verbatim (compact forms are not expanded):
+
+```rust
+use sip_header::extract_all_headers;
+
+let msg = "INVITE sip:bob@example.com SIP/2.0\r\n\
+           Via: SIP/2.0/UDP host\r\n\
+           f: Alice <sip:alice@example.com>\r\n\
+           \r\n";
+let headers = extract_all_headers(msg);
+assert_eq!(headers[0].0, "Via");
+assert_eq!(headers[1].0, "f");  // not "From"
+```
+
 ## Modules
 
 | Module | Description |

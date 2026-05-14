@@ -132,8 +132,43 @@ pub fn extract_header(message: &str, name: &str) -> Vec<String> {
 /// canonicalized — compact forms like `f:` remain `f`, not `From`).
 ///
 /// Stops at the blank line separating headers from body.
-pub fn extract_all_headers(_message: &str) -> Vec<(String, String)> {
-    Vec::new()
+pub fn extract_all_headers(message: &str) -> Vec<(String, String)> {
+    let mut headers: Vec<(String, String)> = Vec::new();
+
+    for line in message.split('\n') {
+        let line = line
+            .strip_suffix('\r')
+            .unwrap_or(line);
+
+        if line.is_empty() {
+            break;
+        }
+
+        if line.starts_with(' ') || line.starts_with('\t') {
+            if let Some((_, value)) = headers.last_mut() {
+                value.push(' ');
+                value.push_str(line.trim_start());
+            }
+            continue;
+        }
+
+        if let Some((hdr_name, hdr_value)) = line.split_once(':') {
+            let hdr_name = hdr_name.trim_end();
+            // RFC 3261: header names are tokens — no whitespace allowed.
+            // This rejects request/status lines like "INVITE sip:..." where
+            // the text before the first colon contains spaces.
+            if !hdr_name.contains(' ') {
+                headers.push((
+                    hdr_name.to_string(),
+                    hdr_value
+                        .trim_start()
+                        .to_string(),
+                ));
+            }
+        }
+    }
+
+    headers
 }
 
 /// Extract the Request-URI from a SIP request message.

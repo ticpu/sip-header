@@ -124,6 +124,18 @@ pub fn extract_header(message: &str, name: &str) -> Vec<String> {
     values
 }
 
+/// Extract all headers from a raw SIP message as name-value pairs.
+///
+/// Returns headers in wire order, preserving multiple occurrences of the
+/// same header name as separate entries. Header folding is unfolded per
+/// RFC 3261 §7.3.1. Header names are returned as-is from the wire (not
+/// canonicalized — compact forms like `f:` remain `f`, not `From`).
+///
+/// Stops at the blank line separating headers from body.
+pub fn extract_all_headers(_message: &str) -> Vec<(String, String)> {
+    Vec::new()
+}
+
 /// Extract the Request-URI from a SIP request message.
 ///
 /// Parses the first line as `Method SP Request-URI SP SIP-Version`
@@ -514,5 +526,166 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
     #[test]
     fn extract_request_uri_empty() {
         assert_eq!(extract_request_uri(""), None);
+    }
+
+    // -- extract_all_headers tests --
+
+    #[test]
+    fn extract_all_headers_basic() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Via: SIP/2.0/UDP host\r\n",
+            "From: Alice <sip:alice@example.com>\r\n",
+            "To: Bob <sip:bob@example.com>\r\n",
+            "\r\n",
+        );
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 3);
+        assert_eq!(headers[0], ("Via".into(), "SIP/2.0/UDP host".into()));
+        assert_eq!(
+            headers[1],
+            ("From".into(), "Alice <sip:alice@example.com>".into())
+        );
+        assert_eq!(
+            headers[2],
+            ("To".into(), "Bob <sip:bob@example.com>".into())
+        );
+    }
+
+    #[test]
+    fn extract_all_headers_folding() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Subject: I know you're there,\r\n",
+            " pick up the phone\r\n",
+            " and talk to me!\r\n",
+            "From: Alice <sip:alice@example.com>\r\n",
+            "\r\n",
+        );
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 2);
+        assert_eq!(
+            headers[0].1,
+            "I know you're there, pick up the phone and talk to me!"
+        );
+    }
+
+    #[test]
+    fn extract_all_headers_compact_forms_verbatim() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "f: Alice <sip:alice@example.com>\r\n",
+            "t: Bob <sip:bob@example.com>\r\n",
+            "i: call-1@host\r\n",
+            "\r\n",
+        );
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 3);
+        assert_eq!(headers[0].0, "f");
+        assert_eq!(headers[1].0, "t");
+        assert_eq!(headers[2].0, "i");
+    }
+
+    #[test]
+    fn extract_all_headers_stops_at_blank_line() {
+        let msg = concat!(
+            "INVITE sip:bob@example.com SIP/2.0\r\n",
+            "From: Alice <sip:alice@example.com>\r\n",
+            "\r\n",
+            "v=0\r\n",
+            "o=alice 123 456 IN IP4 198.51.100.1\r\n",
+        );
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].0, "From");
+    }
+
+    #[test]
+    fn extract_all_headers_multiple_same_name() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Via: SIP/2.0/UDP first.example.com\r\n",
+            "Via: SIP/2.0/UDP second.example.com\r\n",
+            "\r\n",
+        );
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 2);
+        assert_eq!(
+            headers[0],
+            ("Via".into(), "SIP/2.0/UDP first.example.com".into())
+        );
+        assert_eq!(
+            headers[1],
+            ("Via".into(), "SIP/2.0/UDP second.example.com".into())
+        );
+    }
+
+    #[test]
+    fn extract_all_headers_empty_message() {
+        assert!(extract_all_headers("").is_empty());
+    }
+
+    #[test]
+    fn extract_all_headers_skips_request_line() {
+        let msg = concat!(
+            "INVITE sip:bob@example.com SIP/2.0\r\n",
+            "From: Alice <sip:alice@example.com>\r\n",
+            "\r\n",
+        );
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].0, "From");
+    }
+
+    #[test]
+    fn extract_all_headers_skips_status_line() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "From: Alice <sip:alice@example.com>\r\n",
+            "\r\n",
+        );
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].0, "From");
+    }
+
+    #[test]
+    fn extract_all_headers_tab_folding() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Subject: hello\r\n",
+            "\tworld\r\n",
+            "\r\n",
+        );
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].1, "hello world");
+    }
+
+    #[test]
+    fn extract_all_headers_empty_value() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Subject:\r\n",
+            "From: Alice <sip:alice@example.com>\r\n",
+            "\r\n",
+        );
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 2);
+        assert_eq!(headers[0], ("Subject".into(), "".into()));
+    }
+
+    #[test]
+    fn extract_all_headers_bare_lf() {
+        let msg = "SIP/2.0 200 OK\n\
+                   From: Alice <sip:alice@example.com>\n\
+                   \n\
+                   body\n";
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers.len(), 1);
+        assert_eq!(
+            headers[0],
+            ("From".into(), "Alice <sip:alice@example.com>".into())
+        );
     }
 }

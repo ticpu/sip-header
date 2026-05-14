@@ -156,17 +156,20 @@ impl UriInfo {
     /// Each entry should be a single `<uri>;param=value` string. Use this
     /// when entries have already been split by an external mechanism (e.g.
     /// a transport-specific array encoding).
+    ///
+    /// Malformed entries are skipped per RFC 3261 §7.5 error recovery.
+    /// Returns `Err(Empty)` only when all entries fail to parse.
     pub fn from_entries<'a>(
         entries: impl IntoIterator<Item = &'a str>,
     ) -> Result<Self, UriInfoError> {
-        let entries: Vec<_> = entries
+        let parsed: Vec<_> = entries
             .into_iter()
-            .map(parse_entry)
-            .collect::<Result<_, _>>()?;
-        if entries.is_empty() {
+            .filter_map(|raw| parse_entry(raw).ok())
+            .collect();
+        if parsed.is_empty() {
             return Err(UriInfoError::Empty);
         }
-        Ok(Self(entries))
+        Ok(Self(parsed))
     }
 
     /// The parsed entries as a slice.

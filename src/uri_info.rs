@@ -499,4 +499,33 @@ mod tests {
     fn empty_input() {
         assert!(matches!(UriInfo::parse(""), Err(UriInfoError::Empty)));
     }
+
+    #[test]
+    fn parse_tolerates_trailing_comma() {
+        let raw =
+            "<urn:emergency:uid:incidentid:abc:bcf.example.com>;purpose=emergency-IncidentId, ";
+        let info = UriInfo::parse(raw).unwrap();
+        assert_eq!(info.len(), 1);
+        assert_eq!(info.entries()[0].purpose(), Some("emergency-IncidentId"));
+    }
+
+    #[test]
+    fn parse_tolerates_leading_comma() {
+        let raw =
+            ",<urn:emergency:uid:incidentid:abc:bcf.example.com>;purpose=emergency-IncidentId";
+        let info = UriInfo::parse(raw).unwrap();
+        assert_eq!(info.len(), 1);
+    }
+
+    #[test]
+    fn parse_tolerates_double_comma_between_valids() {
+        let raw = "<urn:emergency:uid:incidentid:abc:bcf.example.com>;purpose=emergency-IncidentId,,<https://adr.example.com/x>;purpose=EmergencyCallData.ProviderInfo";
+        let info = UriInfo::parse(raw).unwrap();
+        assert_eq!(info.len(), 2);
+    }
+
+    #[test]
+    fn parse_fails_only_when_all_entries_bad() {
+        assert!(matches!(UriInfo::parse(",,, "), Err(UriInfoError::Empty)));
+    }
 }

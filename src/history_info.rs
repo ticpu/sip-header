@@ -558,4 +558,24 @@ mod tests {
         let r = parse_reason("SIP;cause=200;text=OK");
         assert_eq!(r.text(), Some("OK"));
     }
+
+    // -- Error variant tests --
+
+    #[test]
+    fn malformed_display() {
+        let e = HistoryInfoError::Malformed("too many entries".to_string());
+        assert_eq!(
+            e.to_string(),
+            "malformed History-Info value: too many entries"
+        );
+    }
+
+    #[test]
+    fn malformed_no_source() {
+        use std::error::Error;
+        let e = HistoryInfoError::Malformed("framing failure".to_string());
+        assert!(e
+            .source()
+            .is_none());
+    }
 }

@@ -531,4 +531,12 @@ mod tests {
     fn parse_fails_only_when_all_entries_bad() {
         assert!(matches!(UriInfo::parse(",,, "), Err(UriInfoError::Empty)));
     }
+
+    // -- Error variant tests --
+
+    #[test]
+    fn malformed_display() {
+        let e = UriInfoError::Malformed("too many entries".to_string());
+        assert_eq!(e.to_string(), "malformed URI-info value: too many entries");
+    }
 }

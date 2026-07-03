@@ -77,6 +77,9 @@ pub enum UriInfoError {
     Empty,
     /// An entry was found without angle brackets around the URI.
     MissingAngleBrackets(String),
+    /// The value could not be decoded into entries (transport or framing
+    /// failure before per-entry parsing).
+    Malformed(String),
 }
 
 impl fmt::Display for UriInfoError {
@@ -86,6 +89,7 @@ impl fmt::Display for UriInfoError {
             Self::MissingAngleBrackets(raw) => {
                 write!(f, "missing angle brackets in URI-info entry: {raw}")
             }
+            Self::Malformed(reason) => write!(f, "malformed URI-info value: {reason}"),
         }
     }
 }

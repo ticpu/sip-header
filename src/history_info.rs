@@ -15,6 +15,9 @@ pub enum HistoryInfoError {
     Empty,
     /// An entry could not be parsed as a SIP name-addr.
     InvalidEntry(ParseSipHeaderAddrError),
+    /// The value could not be decoded into entries (transport or framing
+    /// failure before per-entry parsing).
+    Malformed(String),
 }
 
 impl fmt::Display for HistoryInfoError {
@@ -22,6 +25,7 @@ impl fmt::Display for HistoryInfoError {
         match self {
             Self::Empty => write!(f, "empty History-Info header"),
             Self::InvalidEntry(e) => write!(f, "invalid History-Info entry: {e}"),
+            Self::Malformed(reason) => write!(f, "malformed History-Info value: {reason}"),
         }
     }
 }

@@ -100,3 +100,65 @@ macro_rules! impl_from_str_via_parse {
         }
     };
 }
+
+#[cfg(test)]
+mod tests {
+    define_header_enum! {
+        tests_mod: test_enum_generated,
+        error_type: ParseTestEnumError => "unknown test value",
+        /// Exercises generated error newtype, `ALL`, and test module.
+        pub(crate) enum TestEnum {
+            /// `Foo-Wire`.
+            Foo => "Foo-Wire",
+            /// `Bar-Wire`.
+            Bar => "Bar-Wire",
+            /// `Draft-Wire`.
+            #[cfg(feature = "draft")]
+            Draft => "Draft-Wire",
+        }
+    }
+
+    /// Hand-written error for the old-form invocation.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) struct ParseOldEnumError(pub String);
+
+    impl std::fmt::Display for ParseOldEnumError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "unknown old value: {}", self.0)
+        }
+    }
+
+    impl std::error::Error for ParseOldEnumError {}
+
+    define_header_enum! {
+        error_type: ParseOldEnumError,
+        /// Old-form invocation stays source-compatible.
+        pub(crate) enum OldEnum {
+            /// `Old-Wire`.
+            One => "Old-Wire",
+        }
+    }
+
+    #[test]
+    fn generated_error_display() {
+        let e = ParseTestEnumError("nope".to_string());
+        assert_eq!(e.to_string(), "unknown test value: nope");
+    }
+
+    #[test]
+    fn all_const_respects_cfg() {
+        #[cfg(not(feature = "draft"))]
+        assert_eq!(TestEnum::ALL, &[TestEnum::Foo, TestEnum::Bar]);
+        #[cfg(feature = "draft")]
+        assert_eq!(
+            TestEnum::ALL,
+            &[TestEnum::Foo, TestEnum::Bar, TestEnum::Draft]
+        );
+    }
+
+    #[test]
+    fn old_form_generates_all() {
+        assert_eq!(OldEnum::ALL, &[OldEnum::One]);
+        assert_eq!("old-wire".parse::<OldEnum>(), Ok(OldEnum::One));
+    }
+}

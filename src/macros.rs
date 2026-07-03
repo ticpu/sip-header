@@ -1,17 +1,29 @@
 /// Generates a non-exhaustive enum mapping Rust variants to canonical protocol strings.
 ///
-/// Produces: enum definition + `as_str()` + `Display` + `AsRef<str>` + `FromStr`.
-/// `FromStr` uses `eq_ignore_ascii_case` — appropriate for user-facing catalog
-/// types (header names, variable names) where input may come from config files.
-/// Wire protocol state types use hand-written strict `FromStr` instead.
-/// The error type must be defined separately (matching existing crate patterns like
-/// `ParseEventHeaderError`, `ParseChannelVariableError`).
+/// Produces: enum definition, `ALL` const, `as_str()`, `Display`, `AsRef<str>`,
+/// and `FromStr`. `FromStr` uses `eq_ignore_ascii_case` — appropriate for
+/// user-facing catalog types (header names, variable names) where input may
+/// come from config files. Wire protocol state types use hand-written strict
+/// `FromStr` instead.
+///
+/// Two error forms:
+///
+/// - `error_type: ParseMyEnumError,` — the error newtype is defined separately
+///   by the caller as `struct ParseMyEnumError(pub String)`.
+/// - `error_type: ParseMyEnumError => "unknown my value",` — the newtype, its
+///   `Display` (`"unknown my value: {input}"`), and `std::error::Error` are
+///   generated.
+///
+/// An optional leading `tests_mod: my_enum_tests,` generates a `#[cfg(test)]`
+/// module with round-trip, case-insensitivity, `Display`, and unknown-input
+/// tests over `ALL` (requires `PartialEq` on the error type).
 ///
 /// # Example
 ///
 /// ```ignore
 /// define_header_enum! {
-///     error_type: ParseMyEnumError,
+///     tests_mod: my_enum_tests,
+///     error_type: ParseMyEnumError => "unknown my value",
 ///     /// Doc comment for the enum.
 ///     pub enum MyEnum {
 ///         Foo => "foo-wire",
@@ -22,7 +34,8 @@
 #[macro_export]
 macro_rules! define_header_enum {
     (
-        error_type: $Err:ident,
+        $(tests_mod: $tests_mod:ident,)?
+        error_type: $Err:ident $(=> $err_msg:literal)?,
         $(#[$enum_meta:meta])*
         $vis:vis enum $Name:ident {
             $(
@@ -31,6 +44,20 @@ macro_rules! define_header_enum {
             ),+ $(,)?
         }
     ) => {
+        $(
+            #[doc = concat!("Error for an unrecognized value; displays as `", $err_msg, ": <input>`.")]
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            $vis struct $Err(pub String);
+
+            impl std::fmt::Display for $Err {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, concat!($err_msg, ": {}"), self.0)
+                }
+            }
+
+            impl std::error::Error for $Err {}
+        )?
+
         $(#[$enum_meta])*
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -44,10 +71,19 @@ macro_rules! define_header_enum {
         }
 
         impl $Name {
+            /// All variants, in declaration order (respecting any `#[cfg]` attributes).
+            // allow(unused_doc_comments): variant doc attrs are propagated onto
+            // array elements so that #[cfg] attrs also propagate; the doc attrs
+            // are harmless noise here. Same pattern in as_str/from_str below.
+            #[allow(unused_doc_comments)]
+            pub const ALL: &'static [Self] = &[
+                $(
+                    $(#[$var_meta])*
+                    $Name::$variant,
+                )+
+            ];
+
             /// Canonical protocol string.
-            // allow(unused_doc_comments): variant doc attrs are propagated into
-            // match arms so that #[cfg] attrs also propagate; the doc attrs
-            // are harmless noise here.
             #[allow(unused_doc_comments)]
             pub fn as_str(&self) -> &'static str {
                 match self {
@@ -85,6 +121,41 @@ macro_rules! define_header_enum {
                 Err($Err(s.to_string()))
             }
         }
+
+        $(
+            #[cfg(test)]
+            mod $tests_mod {
+                use super::{$Err, $Name};
+
+                #[test]
+                fn round_trip() {
+                    for v in $Name::ALL {
+                        assert_eq!(v.as_str().parse::<$Name>(), Ok(*v));
+                    }
+                }
+
+                #[test]
+                fn case_insensitive() {
+                    for v in $Name::ALL {
+                        assert_eq!(v.as_str().to_lowercase().parse::<$Name>(), Ok(*v));
+                        assert_eq!(v.as_str().to_uppercase().parse::<$Name>(), Ok(*v));
+                    }
+                }
+
+                #[test]
+                fn display_matches_as_str() {
+                    for v in $Name::ALL {
+                        assert_eq!(v.to_string(), v.as_str());
+                    }
+                }
+
+                #[test]
+                fn unknown_input_err() {
+                    let input = "\u{0}no-such-value\u{0}";
+                    assert_eq!(input.parse::<$Name>(), Err($Err(input.to_string())));
+                }
+            }
+        )?
     };
 }
 

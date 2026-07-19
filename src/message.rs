@@ -710,6 +710,94 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
         assert_eq!(headers[0], ("Subject".into(), "".into()));
     }
 
+    // -- extract_body tests --
+
+    #[test]
+    fn extract_body_crlf() {
+        assert_eq!(
+            extract_body(SAMPLE_INVITE),
+            Some("v=0\r\no=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n")
+        );
+    }
+
+    #[test]
+    fn extract_body_bare_lf() {
+        let msg = "SIP/2.0 200 OK\n\
+                   From: Alice <sip:alice@host>\n\
+                   \n\
+                   v=0\no=alice 123 456 IN IP4 198.51.100.1\n";
+        assert_eq!(
+            extract_body(msg),
+            Some("v=0\no=alice 123 456 IN IP4 198.51.100.1\n")
+        );
+    }
+
+    #[test]
+    fn extract_body_folded_headers() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Subject: I know you're there,\r\n",
+            " pick up the phone\r\n",
+            "\r\n",
+            "body text\r\n",
+        );
+        assert_eq!(extract_body(msg), Some("body text\r\n"));
+    }
+
+    #[test]
+    fn extract_body_no_blank_line() {
+        let msg = "INVITE sip:bob@example.com SIP/2.0\r\n\
+                   From: Alice <sip:alice@example.com>\r\n";
+        assert_eq!(extract_body(msg), None);
+    }
+
+    #[test]
+    fn extract_body_blank_line_nothing_after() {
+        let msg = "SIP/2.0 200 OK\r\n\
+                   From: Alice <sip:alice@host>\r\n\
+                   \r\n";
+        assert_eq!(extract_body(msg), None);
+    }
+
+    #[test]
+    fn extract_body_empty_message() {
+        assert_eq!(extract_body(""), None);
+    }
+
+    #[test]
+    fn extract_body_multipart_blank_lines_kept() {
+        let msg = concat!(
+            "INVITE sip:sos@psap.example.com SIP/2.0\r\n",
+            "Content-Type: multipart/mixed;boundary=b1\r\n",
+            "\r\n",
+            "--b1\r\n",
+            "Content-Type: application/sdp\r\n",
+            "\r\n",
+            "v=0\r\n",
+            "--b1--\r\n",
+        );
+        assert_eq!(
+            extract_body(msg),
+            Some("--b1\r\nContent-Type: application/sdp\r\n\r\nv=0\r\n--b1--\r\n")
+        );
+    }
+
+    #[test]
+    fn extract_body_header_looking_line_in_body() {
+        let msg = "SIP/2.0 200 OK\r\n\
+                   \r\n\
+                   From: not a header\r\n";
+        assert_eq!(extract_body(msg), Some("From: not a header\r\n"));
+    }
+
+    #[test]
+    fn extract_body_after_request_line() {
+        let msg = "INVITE sip:bob@example.com SIP/2.0\r\n\
+                   \r\n\
+                   v=0\r\n";
+        assert_eq!(extract_body(msg), Some("v=0\r\n"));
+    }
+
     #[test]
     fn extract_all_headers_bare_lf() {
         let msg = "SIP/2.0 200 OK\n\

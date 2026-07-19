@@ -80,6 +80,15 @@ delegating to it. The `impl_from_str_via_parse!` macro eliminates the
 boilerplate, replacing six identical eight-line impl blocks with
 one-line invocations.
 
+## Body extraction shares the header boundary
+
+Callers re-deriving the header/body boundary as `split_once("\r\n\r\n")`
+silently lose the body on bare-`\n` messages this crate accepts, so
+`extract_body` and the header extractors share one boundary helper. The
+splitter stays private: a public one would freeze header-block slice
+semantics we haven't needed to define, and exposing it later is
+non-breaking.
+
 ## extract_header returns Vec
 
 The 0.2 API joined multiple occurrences of the same header with `, `.

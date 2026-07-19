@@ -125,7 +125,7 @@ assert_eq!(headers[1].0, "f");  // not "From"
 |---|---|
 | `header_addr` | RFC 3261 `name-addr` with header-level parameters |
 | `header` | `SipHeader` enum, `SipHeaderLookup` trait |
-| `message` | Extract headers from raw SIP message text |
+| `message` | Extract headers and body from raw SIP message text |
 | `via` | RFC 3261 Via header parser |
 | `warning` | RFC 3261 Warning header parser |
 | `auth` | SIP authentication (Authorization, WWW-Authenticate, etc.) |

@@ -6,10 +6,59 @@
 //!   header folding (RFC 3261 §7.3.1), and compact forms (RFC 3261 §7.3.3)
 //! - [`extract_request_uri`] — pull the Request-URI from the request line
 //!   (RFC 3261 §7.1)
+//! - [`extract_body`] — pull the message body following the header block
+//!   (RFC 3261 §7.4)
 //!
 //! Gated behind the `message` feature (enabled by default).
 
 use crate::header::SipHeader;
+
+/// Split at the first empty line (after `\r` stripping) per RFC 3261 §7.3.1.
+///
+/// Returns the header block (blank line excluded) and the byte offset of
+/// the first body byte, or `None` when the message has no blank line.
+fn split_at_blank_line(message: &str) -> (&str, Option<usize>) {
+    let mut offset = 0;
+    for line in message.split('\n') {
+        let stripped = line
+            .strip_suffix('\r')
+            .unwrap_or(line);
+        if stripped.is_empty() {
+            let body_start = offset + line.len() + 1;
+            return (
+                &message[..offset],
+                (body_start <= message.len()).then_some(body_start),
+            );
+        }
+        offset += line.len() + 1;
+    }
+    (message, None)
+}
+
+/// Extract the message body — everything after the blank line that ends
+/// the header block.
+///
+/// Uses the same boundary rule as [`extract_all_headers`]: the first empty
+/// line after `\r` stripping, so bare-`\n` messages behave the same as CRLF
+/// ones. The body is returned verbatim — no trimming, unfolding, or
+/// decoding — and `Content-Length` is not consulted; the body is the rest
+/// of the given text. Returns `None` when the message has no blank line or
+/// nothing follows it.
+///
+/// # Examples
+///
+/// ```
+/// let msg = "INVITE sip:bob@example.com SIP/2.0\r\n\
+///            Content-Type: application/sdp\r\n\
+///            \r\n\
+///            v=0\r\n";
+/// assert_eq!(sip_header::extract_body(msg), Some("v=0\r\n"));
+/// ```
+pub fn extract_body(message: &str) -> Option<&str> {
+    let (_, body_start) = split_at_blank_line(message);
+    let body = &message[body_start?..];
+    (!body.is_empty()).then_some(body)
+}
 
 /// RFC 3261 §7.3.3 compact form equivalences.
 ///
@@ -83,15 +132,12 @@ fn matches_header_name(wire_name: &str, target: &str) -> bool {
 pub fn extract_header(message: &str, name: &str) -> Vec<String> {
     let mut values: Vec<String> = Vec::new();
     let mut current_match = false;
+    let (header_block, _) = split_at_blank_line(message);
 
-    for line in message.split('\n') {
+    for line in header_block.split('\n') {
         let line = line
             .strip_suffix('\r')
             .unwrap_or(line);
-
-        if line.is_empty() {
-            break;
-        }
 
         if line.starts_with(' ') || line.starts_with('\t') {
             if current_match {
@@ -134,15 +180,12 @@ pub fn extract_header(message: &str, name: &str) -> Vec<String> {
 /// Stops at the blank line separating headers from body.
 pub fn extract_all_headers(message: &str) -> Vec<(String, String)> {
     let mut headers: Vec<(String, String)> = Vec::new();
+    let (header_block, _) = split_at_blank_line(message);
 
-    for line in message.split('\n') {
+    for line in header_block.split('\n') {
         let line = line
             .strip_suffix('\r')
             .unwrap_or(line);
-
-        if line.is_empty() {
-            break;
-        }
 
         if line.starts_with(' ') || line.starts_with('\t') {
             if let Some((_, value)) = headers.last_mut() {

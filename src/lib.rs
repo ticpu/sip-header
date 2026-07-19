@@ -9,7 +9,7 @@
 //!
 //! - [`header_addr`] — RFC 3261 `name-addr` with header-level parameters
 //! - [`header`] — SIP header name catalog and [`SipHeaderLookup`] trait
-//! - [`message`] — Extract headers and Request-URI from raw SIP message text (feature: `message`)
+//! - [`message`] — Extract headers, Request-URI and body from raw SIP message text (feature: `message`)
 //! - [`via`] — RFC 3261 Via header parser
 //! - [`warning`] — RFC 3261 Warning header parser
 //! - [`auth`] — SIP authentication value parser (Authorization, WWW-Authenticate, etc.)
@@ -56,7 +56,7 @@ pub use header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};
 pub use header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 pub use history_info::{HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason};
 #[cfg(feature = "message")]
-pub use message::{extract_all_headers, extract_header, extract_request_uri};
+pub use message::{extract_all_headers, extract_body, extract_header, extract_request_uri};
 pub use security::{SipSecurity, SipSecurityError, SipSecurityMechanism};
 pub use uri_info::{UriInfo, UriInfoEntry, UriInfoError};
 pub use via::{SipVia, SipViaEntry, SipViaError};

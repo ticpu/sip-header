@@ -135,6 +135,13 @@ impl SipHeaderAddr {
 
     /// Iterator over header-level parameters as `(key, raw_value)` pairs.
     /// Keys are lowercased; values retain their original percent-encoding.
+    ///
+    /// Header-level parameter names (after `>`) are RFC 3261 §25
+    /// `generic-param` tokens, where `%` is a literal character — names are
+    /// never percent-decoded here. URI parameters inside `<…>` are the
+    /// opposite: [`sip_uri`] decodes their names. The same feature tag
+    /// therefore keys as `+urn%3aemergency%3a…` in this list but
+    /// `+urn:emergency:…` as a URI parameter.
     pub fn params(&self) -> impl Iterator<Item = (&str, Option<&str>)> {
         self.params
             .iter()
@@ -142,6 +149,10 @@ impl SipHeaderAddr {
     }
 
     /// Look up a header-level parameter by name (case-insensitive).
+    ///
+    /// The name is matched against the raw token from the wire — parameter
+    /// names are not percent-decoded (see [`params()`](Self::params)), so a
+    /// percent-encoded name must be looked up in its encoded form.
     ///
     /// Values are percent-decoded and validated as UTF-8. Returns `Err` if
     /// the percent-decoded octets are not valid UTF-8. For non-UTF-8 values

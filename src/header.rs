@@ -1189,6 +1189,59 @@ mod tests {
     }
 
     #[test]
+    fn replaces_accessor() {
+        let h = headers_with(&[("Replaces", "abc123@203.0.113.5;to-tag=t1;from-tag=f1")]);
+        let r = h
+            .replaces()
+            .unwrap()
+            .unwrap();
+        assert_eq!(r.call_id(), "abc123@203.0.113.5");
+        assert_eq!(r.to_tag(), "t1");
+        assert_eq!(r.from_tag(), "f1");
+    }
+
+    #[test]
+    fn replaces_absent() {
+        let h = headers_with(&[]);
+        assert!(h
+            .replaces()
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn replaces_malformed_err() {
+        let h = headers_with(&[("Replaces", "abc123@203.0.113.5;to-tag=t1")]);
+        assert!(h
+            .replaces()
+            .is_err());
+    }
+
+    #[test]
+    fn join_accessor() {
+        let h = headers_with(&[("Join", "abc123@203.0.113.5;to-tag=t1;from-tag=f1")]);
+        let j = h
+            .join()
+            .unwrap()
+            .unwrap();
+        assert_eq!(j.call_id(), "abc123@203.0.113.5");
+    }
+
+    #[test]
+    fn target_dialog_accessor() {
+        let h = headers_with(&[(
+            "Target-Dialog",
+            "abc123@203.0.113.5;local-tag=l1;remote-tag=r1",
+        )]);
+        let t = h
+            .target_dialog()
+            .unwrap()
+            .unwrap();
+        assert_eq!(t.local_tag(), "l1");
+        assert_eq!(t.remote_tag(), "r1");
+    }
+
+    #[test]
     fn authorization_accessor() {
         let h = headers_with(&[(
             "Authorization",

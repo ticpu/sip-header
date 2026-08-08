@@ -775,6 +775,32 @@ mod tests {
     }
 
     #[test]
+    fn replaces_uri_header() {
+        let addr: SipHeaderAddr =
+            "<sip:bob@203.0.113.9?Replaces=abc123%40203.0.113.5%3Bto-tag%3Dt1%3Bfrom-tag%3Df1>"
+                .parse()
+                .unwrap();
+        let r = addr
+            .replaces()
+            .unwrap()
+            .unwrap();
+        assert_eq!(r.call_id(), "abc123@203.0.113.5");
+        assert_eq!(r.host(), Some("203.0.113.5"));
+        assert_eq!(r.to_tag(), "t1");
+        assert_eq!(r.from_tag(), "f1");
+    }
+
+    #[test]
+    fn replaces_uri_header_absent() {
+        let addr: SipHeaderAddr = "<sip:bob@203.0.113.9>"
+            .parse()
+            .unwrap();
+        assert!(addr
+            .replaces()
+            .is_none());
+    }
+
+    #[test]
     fn host_only_ipv4_with_feature_tag_param() {
         let input =
             "<sip:198.51.100.7:5060;transport=udp>;+urn%3Aemergency%3Amedia-feature.psap-call-control";

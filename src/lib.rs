@@ -21,6 +21,8 @@
 //! - [`uri_info`] — `<absoluteURI> *(SEMI generic-param)` parser (Call-Info, Alert-Info, Error-Info)
 //! - [`history_info`] — RFC 7044 History-Info header parser
 //! - [`geolocation`] — RFC 6442 Geolocation header parser
+//! - [`replaces`] — RFC 3891 Replaces / RFC 3911 Join header parser
+//! - [`target_dialog`] — RFC 4538 Target-Dialog header parser
 //! - `conference_info` — RFC 4575 conference event package (feature: `conference-info`)
 
 #[macro_use]
@@ -41,7 +43,9 @@ pub mod header_addr;
 pub mod history_info;
 #[cfg(feature = "message")]
 pub mod message;
+pub mod replaces;
 pub mod security;
+pub mod target_dialog;
 pub mod uri_info;
 pub mod via;
 pub mod warning;
@@ -57,7 +61,9 @@ pub use header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 pub use history_info::{HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason};
 #[cfg(feature = "message")]
 pub use message::{extract_all_headers, extract_body, extract_header, extract_request_uri};
+pub use replaces::{SipReplaces, SipReplacesError};
 pub use security::{SipSecurity, SipSecurityError, SipSecurityMechanism};
+pub use target_dialog::{SipTargetDialog, SipTargetDialogError};
 pub use uri_info::{UriInfo, UriInfoEntry, UriInfoError};
 pub use via::{SipVia, SipViaEntry, SipViaError};
 pub use warning::{SipWarning, SipWarningEntry, SipWarningError};

@@ -775,6 +775,69 @@ mod tests {
     }
 
     #[test]
+    fn host_only_ipv4_with_feature_tag_param() {
+        let input =
+            "<sip:198.51.100.7:5060;transport=udp>;+urn%3Aemergency%3Amedia-feature.psap-call-control";
+        let addr: SipHeaderAddr = input
+            .parse()
+            .unwrap();
+        let sip = addr
+            .sip_uri()
+            .unwrap();
+        assert_eq!(sip.user(), None);
+        assert_eq!(
+            sip.host()
+                .to_string(),
+            "198.51.100.7"
+        );
+        assert_eq!(sip.port(), Some(5060));
+        assert_eq!(sip.param("transport"), Some(&Some("udp".to_string())));
+        assert_eq!(
+            addr.param_raw("+urn%3Aemergency%3Amedia-feature.psap-call-control"),
+            Some(None),
+        );
+    }
+
+    #[test]
+    fn host_only_ipv6_with_feature_tag_param() {
+        let input =
+            "<sip:[2001:db8::7]:5060;transport=udp>;+urn%3Aemergency%3Amedia-feature.psap-call-control";
+        let addr: SipHeaderAddr = input
+            .parse()
+            .unwrap();
+        let sip = addr
+            .sip_uri()
+            .unwrap();
+        assert_eq!(sip.user(), None);
+        assert_eq!(
+            sip.host()
+                .to_string(),
+            "[2001:db8::7]"
+        );
+        assert_eq!(sip.port(), Some(5060));
+        assert_eq!(
+            addr.param_raw("+urn%3Aemergency%3Amedia-feature.psap-call-control"),
+            Some(None),
+        );
+    }
+
+    #[test]
+    fn parse_list_host_only_ipv4_with_feature_tag_param() {
+        let input =
+            "<sip:198.51.100.7:5060;transport=udp>;+urn%3Aemergency%3Amedia-feature.psap-call-control";
+        let addrs = SipHeaderAddr::parse_list(input).unwrap();
+        assert_eq!(addrs.len(), 1);
+        assert_eq!(
+            addrs[0]
+                .sip_uri()
+                .unwrap()
+                .host()
+                .to_string(),
+            "198.51.100.7"
+        );
+    }
+
+    #[test]
     fn params_iterator() {
         let addr: SipHeaderAddr = "<sip:user@host>;tag=abc;lr;expires=60"
             .parse()

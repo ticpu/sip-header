@@ -6,6 +6,8 @@ use std::str::{FromStr, Utf8Error};
 
 use percent_encoding::percent_decode_str;
 
+use crate::replaces::{SipReplaces, SipReplacesError};
+
 /// Parsed SIP `name-addr` (RFC 3261 §25.1) with header-level parameters.
 ///
 /// The `name-addr` production from RFC 3261 §25.1 combines an optional
@@ -170,6 +172,18 @@ impl SipHeaderAddr {
             .iter()
             .find(|(k, _)| *k == needle)
             .map(|(_, v)| v.as_deref())
+    }
+
+    /// Parse a `Replaces` URI header (`<sip:…?Replaces=…>`), if present.
+    ///
+    /// Returns `None` when the URI is not a SIP/SIPS URI or carries no
+    /// `Replaces` header; `Some(Err)` when the value doesn't conform to
+    /// RFC 3891 §6.1.
+    pub fn replaces(&self) -> Option<Result<SipReplaces, SipReplacesError>> {
+        let value = self
+            .sip_uri()?
+            .header("Replaces")?;
+        Some(SipReplaces::parse_uri_header(value))
     }
 
     /// Parse a comma-separated list of `name-addr` / `addr-spec` values.

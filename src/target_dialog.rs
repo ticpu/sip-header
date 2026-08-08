@@ -1,5 +1,138 @@
 //! RFC 4538 `Target-Dialog` header parser.
 
+use std::fmt;
+
+use crate::replaces::{decode_uri_header_value, parse_dialog_id, write_params, DialogIdError};
+
+/// Error parsing a Target-Dialog header.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SipTargetDialogError {
+    /// The Target-Dialog header value is empty.
+    Empty,
+    /// The Target-Dialog header value has an invalid format.
+    InvalidFormat(String),
+}
+
+impl fmt::Display for SipTargetDialogError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => write!(f, "Target-Dialog header is empty"),
+            Self::InvalidFormat(msg) => write!(f, "Invalid Target-Dialog format: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for SipTargetDialogError {}
+
+impl From<DialogIdError> for SipTargetDialogError {
+    fn from(e: DialogIdError) -> Self {
+        match e {
+            DialogIdError::Empty => Self::Empty,
+            DialogIdError::Invalid(msg) => Self::InvalidFormat(msg),
+        }
+    }
+}
+
+/// A parsed `Target-Dialog` header value (RFC 4538 §7).
+///
+/// Identifies an existing dialog: Call-ID plus the mandatory `local-tag`
+/// and `remote-tag`, both from the perspective of the request recipient.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SipTargetDialog {
+    call_id: String,
+    local_tag: String,
+    remote_tag: String,
+    params: Vec<(String, Option<String>)>,
+    uri_header_framing: bool,
+}
+
+impl SipTargetDialog {
+    /// Parse a wire-form header value: `callid;local-tag=x;remote-tag=y`.
+    pub fn parse(raw: &str) -> Result<Self, SipTargetDialogError> {
+        let id = parse_dialog_id(raw, "local-tag", "remote-tag", false)?;
+        Ok(Self {
+            call_id: id.call_id,
+            local_tag: id.first_tag,
+            remote_tag: id.second_tag,
+            params: id.params,
+            uri_header_framing: false,
+        })
+    }
+
+    /// Parse the percent-encoded framing found in a URI header,
+    /// e.g. `callid%40host%3Blocal-tag%3Dx%3Bremote-tag%3Dy`.
+    ///
+    /// Accepts the canonicalised value returned by
+    /// [`sip_uri::SipUri::header`]; [`Display`](fmt::Display) re-encodes to
+    /// that same canonical form (uppercase hex).
+    pub fn parse_uri_header(raw: &str) -> Result<Self, SipTargetDialogError> {
+        let decoded = decode_uri_header_value(raw)?;
+        let mut parsed = Self::parse(&decoded)?;
+        parsed.uri_header_framing = true;
+        Ok(parsed)
+    }
+
+    /// The Call-ID of the target dialog.
+    pub fn call_id(&self) -> &str {
+        &self.call_id
+    }
+
+    /// The host part of the Call-ID (after `@`), if present.
+    pub fn host(&self) -> Option<&str> {
+        self.call_id
+            .split_once('@')
+            .map(|(_, host)| host)
+    }
+
+    /// The mandatory `local-tag` value.
+    pub fn local_tag(&self) -> &str {
+        &self.local_tag
+    }
+
+    /// The mandatory `remote-tag` value.
+    pub fn remote_tag(&self) -> &str {
+        &self.remote_tag
+    }
+
+    /// Returns all generic parameters (tags excluded).
+    pub fn params(&self) -> &[(String, Option<String>)] {
+        &self.params
+    }
+
+    /// Returns a specific generic parameter by key (case-insensitive).
+    pub fn param(&self, key: &str) -> Option<Option<&str>> {
+        let key_lower = key.to_ascii_lowercase();
+        self.params
+            .iter()
+            .find(|(k, _)| k == &key_lower)
+            .map(|(_, v)| v.as_deref())
+    }
+
+    fn wire_form(&self) -> String {
+        let mut s = format!(
+            "{};local-tag={};remote-tag={}",
+            self.call_id, self.local_tag, self.remote_tag
+        );
+        write_params(&mut s, &self.params);
+        s
+    }
+}
+
+impl fmt::Display for SipTargetDialog {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let wire = self.wire_form();
+        if self.uri_header_framing {
+            f.write_str(&sip_uri::encode_uri_header(&wire))
+        } else {
+            f.write_str(&wire)
+        }
+    }
+}
+
+impl_from_str_via_parse!(SipTargetDialog, SipTargetDialogError);
+
 #[cfg(test)]
 mod tests {
     use super::*;

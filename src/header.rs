@@ -11,7 +11,9 @@ use crate::auth::{SipAuthError, SipAuthValue};
 use crate::contact::ContactValue;
 use crate::header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 use crate::history_info::{HistoryInfo, HistoryInfoError};
+use crate::replaces::{SipReplaces, SipReplacesError};
 use crate::security::{SipSecurity, SipSecurityError};
+use crate::target_dialog::{SipTargetDialog, SipTargetDialogError};
 use crate::uri_info::{UriInfo, UriInfoError};
 use crate::via::{SipVia, SipViaError};
 use crate::warning::{SipWarning, SipWarningError};
@@ -609,6 +611,33 @@ pub trait SipHeaderLookup {
     fn via(&self) -> Result<Option<SipVia>, SipViaError> {
         match self.sip_header(SipHeader::Via) {
             Some(s) => SipVia::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Replaces` into a [`SipReplaces`] (RFC 3891 §6.1).
+    fn replaces(&self) -> Result<Option<SipReplaces>, SipReplacesError> {
+        match self.sip_header(SipHeader::Replaces) {
+            Some(s) => SipReplaces::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Join` into a [`SipReplaces`] (RFC 3911 §7.1).
+    ///
+    /// Join shares the Replaces grammar (`callid;to-tag=x;from-tag=y`), so
+    /// it reuses the same type.
+    fn join(&self) -> Result<Option<SipReplaces>, SipReplacesError> {
+        match self.sip_header(SipHeader::Join) {
+            Some(s) => SipReplaces::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Target-Dialog` into a [`SipTargetDialog`] (RFC 4538 §7).
+    fn target_dialog(&self) -> Result<Option<SipTargetDialog>, SipTargetDialogError> {
+        match self.sip_header(SipHeader::TargetDialog) {
+            Some(s) => SipTargetDialog::parse(s).map(Some),
             None => Ok(None),
         }
     }

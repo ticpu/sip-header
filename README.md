@@ -137,6 +137,8 @@ assert_eq!(headers[1].0, "f");  // not "From"
 | `uri_info` | Call-Info, Alert-Info, Error-Info (URI + params) |
 | `history_info` | RFC 7044 History-Info with RFC 3326 Reason |
 | `geolocation` | RFC 6442 Geolocation header |
+| `replaces` | RFC 3891 Replaces / RFC 3911 Join headers |
+| `target_dialog` | RFC 4538 Target-Dialog header |
 | `conference_info` | RFC 4575 conference event XML (feature: `conference-info`) |
 
 ## Features
@@ -163,6 +165,9 @@ This crate is part of a Rust SIP/NG9-1-1 ecosystem:
 - **RFC 3325** — P-Asserted-Identity, P-Preferred-Identity
 - **RFC 3326** — Reason header (embedded in History-Info)
 - **RFC 3329** — Security mechanism (Security-Client/Server/Verify)
+- **RFC 3891** — Replaces header (top-level and URI-header framings)
+- **RFC 3911** — Join header
+- **RFC 4538** — Target-Dialog header
 - **RFC 4575** — Conference event package XML (feature-gated)
 - **RFC 6442** — Geolocation header
 - **RFC 7044** — History-Info header

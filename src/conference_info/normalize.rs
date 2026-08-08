@@ -68,7 +68,7 @@ fn strip_start_element(e: &BytesStart<'_>) -> BytesStart<'static> {
         )
         .into_owned();
         let value = attr
-            .unescape_value()
+            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
             .unwrap_or_default()
             .into_owned();
         stripped.push_attribute((key.as_str(), value.as_str()));

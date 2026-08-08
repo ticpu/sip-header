@@ -24,8 +24,8 @@ conference-info = ["dep:quick-xml", "serde"]
 sip-uri = "0.2"
 percent-encoding = "2"
 serde = { version = "1.0", features = ["derive"], optional = true }
-quick-xml = { version = "0.39", features = ["serialize"], optional = true }
+quick-xml = { version = "0.41", features = ["serialize"], optional = true }
 
 [dev-dependencies]
 serde_json = "1.0"
-quick-xml = { version = "0.39", features = ["serialize"] }
+quick-xml = { version = "0.41", features = ["serialize"] }

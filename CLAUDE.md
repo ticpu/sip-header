@@ -118,27 +118,12 @@ indistinguishable from absent headers.
 
 ## Release Workflow
 
-### Pre-release checks
-
-```sh
-cargo fmt --all
-cargo clippy --release -- -D warnings
-cargo test --release
-cargo build --release
-cargo semver-checks check-release
-cargo publish --dry-run
-```
-
-### Publish
-
-**Never `cargo publish` without completing these steps first:**
-
-1. Create signed annotated tags with a short changelog (`git tag -as`).
-   The tag message should list notable changes since the previous tag,
-   one line per item, using `git log --oneline <prev-tag>..HEAD` as input.
-2. Push the tags (`git push --tags`)
-3. Wait for CI to pass on the tagged commit
-4. Only then `cargo publish`
+`.claude/commands/release.md` (`/release`) is the canonical process:
+`scripts/release-check.sh`, changelog to `scratch/`, `scripts/release-tag.sh`
+(Cargo.lock pinned on the detached tag commit only — never on master), push
+and wait for CI green, then `cargo publish` run directly — publish is
+irrevocable and is never wrapped in a script. Never publish without the tag
+pushed and CI green on master.
 
 ## Documentation Style
 

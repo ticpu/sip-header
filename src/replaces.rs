@@ -134,6 +134,58 @@ pub(crate) fn parse_dialog_id(
     })
 }
 
+fn is_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric()
+        || matches!(
+            c,
+            '-' | '.'
+                | '!'
+                | '%'
+                | '*'
+                | '_'
+                | '+'
+                | '`'
+                | '\''
+                | '~'
+                | '('
+                | ')'
+                | '<'
+                | '>'
+                | ':'
+                | '\\'
+                | '"'
+                | '/'
+                | '['
+                | ']'
+                | '?'
+                | '{'
+                | '}'
+        )
+}
+
+/// Validate `callid = word [ "@" word ]` (RFC 3261 §25.1).
+pub(crate) fn validate_call_id(raw: &str) -> Result<(), DialogIdError> {
+    let (word, host) = match raw.split_once('@') {
+        Some((word, host)) => (word, Some(host)),
+        None => (raw, None),
+    };
+    for part in std::iter::once(word).chain(host) {
+        if part.is_empty() {
+            return Err(DialogIdError::Invalid("empty call-id word".to_string()));
+        }
+        if let Some(c) = part
+            .chars()
+            .find(|c| !is_word_char(*c))
+        {
+            return Err(DialogIdError::Invalid(format!(
+                "call-id contains {:?}, not an RFC 3261 word character",
+                c
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Decode a percent-encoded URI-header value for dialog-id parsing.
 pub(crate) fn decode_uri_header_value(raw: &str) -> Result<String, DialogIdError> {
     percent_decode_str(raw)
@@ -188,6 +240,31 @@ impl SipReplaces {
     /// The Call-ID of the dialog being replaced.
     pub fn call_id(&self) -> &str {
         &self.call_id
+    }
+
+    /// Returns this value with a different Call-ID.
+    ///
+    /// Framing, both tags, `early-only` and all generic parameters are
+    /// preserved, so [`Display`](fmt::Display) re-emits the parsed input with
+    /// only the Call-ID changed.
+    ///
+    /// Errors unless `call_id` is an RFC 3261 §25.1
+    /// `callid = word [ "@" word ]`. [`parse`](Self::parse) is lenient about
+    /// this token; a value that never came off the wire is not.
+    ///
+    /// ```
+    /// use sip_header::SipReplaces;
+    ///
+    /// let r = SipReplaces::parse("abc@203.0.113.5;to-tag=t1;from-tag=f1;early-only")?
+    ///     .with_call_id("abc@example.com")?;
+    /// assert_eq!(r.to_string(), "abc@example.com;to-tag=t1;from-tag=f1;early-only");
+    /// # Ok::<(), sip_header::SipReplacesError>(())
+    /// ```
+    pub fn with_call_id(mut self, call_id: impl Into<String>) -> Result<Self, SipReplacesError> {
+        let call_id = call_id.into();
+        validate_call_id(&call_id)?;
+        self.call_id = call_id;
+        Ok(self)
     }
 
     /// The host part of the Call-ID (after `@`), if present.

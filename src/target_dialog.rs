@@ -2,7 +2,9 @@
 
 use std::fmt;
 
-use crate::replaces::{decode_uri_header_value, parse_dialog_id, write_params, DialogIdError};
+use crate::replaces::{
+    decode_uri_header_value, parse_dialog_id, validate_call_id, write_params, DialogIdError,
+};
 
 /// Error parsing a Target-Dialog header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,6 +79,34 @@ impl SipTargetDialog {
     /// The Call-ID of the target dialog.
     pub fn call_id(&self) -> &str {
         &self.call_id
+    }
+
+    /// Returns this value with a different Call-ID.
+    ///
+    /// Framing, both tags and all generic parameters are preserved, so
+    /// [`Display`](fmt::Display) re-emits the parsed input with only the
+    /// Call-ID changed.
+    ///
+    /// Errors unless `call_id` is an RFC 3261 §25.1
+    /// `callid = word [ "@" word ]`. [`parse`](Self::parse) is lenient about
+    /// this token; a value that never came off the wire is not.
+    ///
+    /// ```
+    /// use sip_header::SipTargetDialog;
+    ///
+    /// let t = SipTargetDialog::parse("abc@203.0.113.5;local-tag=l1;remote-tag=r1")?
+    ///     .with_call_id("abc@example.com")?;
+    /// assert_eq!(t.to_string(), "abc@example.com;local-tag=l1;remote-tag=r1");
+    /// # Ok::<(), sip_header::SipTargetDialogError>(())
+    /// ```
+    pub fn with_call_id(
+        mut self,
+        call_id: impl Into<String>,
+    ) -> Result<Self, SipTargetDialogError> {
+        let call_id = call_id.into();
+        validate_call_id(&call_id)?;
+        self.call_id = call_id;
+        Ok(self)
     }
 
     /// The host part of the Call-ID (after `@`), if present.

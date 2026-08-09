@@ -102,6 +102,15 @@ re-encodes to canonical hnv form (uppercase hex), matching sip-uri's
 canonicalised output, so round-trip is against that form rather than the
 producer's original hex casing.
 
+## Mutators validate against the grammar their parser does not enforce
+
+A parser's leniency is what makes real traffic survivable; a value handed to a
+mutator never crossed the wire, so it earns none of that — an unchecked Call-ID
+set on a dialog identifier re-serializes into a header naming a different dialog.
+Public mutators therefore return `Result` and check the RFC production for the
+field they set, and the resulting asymmetry stands: a value `parse` accepted can
+be rejected when set back through a mutator.
+
 ## extract_header returns Vec
 
 The 0.2 API joined multiple occurrences of the same header with `, `.

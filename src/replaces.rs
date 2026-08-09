@@ -386,6 +386,84 @@ mod tests {
     }
 
     #[test]
+    fn with_call_id_wire_changes_only_call_id() {
+        let input = "abc123@203.0.113.5;to-tag=t1;from-tag=f1;early-only;foo=bar";
+        let r = SipReplaces::parse(input)
+            .unwrap()
+            .with_call_id("xyz789@example.com")
+            .unwrap();
+        assert_eq!(
+            r.to_string(),
+            "xyz789@example.com;to-tag=t1;from-tag=f1;early-only;foo=bar"
+        );
+    }
+
+    #[test]
+    fn with_call_id_keeps_uri_header_framing() {
+        let input = "abc123%40203.0.113.5%3Bto-tag%3Dt1%3Bfrom-tag%3Df1";
+        let r = SipReplaces::parse_uri_header(input)
+            .unwrap()
+            .with_call_id("abc123@example.com")
+            .unwrap();
+        assert_eq!(
+            r.to_string(),
+            "abc123%40example.com%3Bto-tag%3Dt1%3Bfrom-tag%3Df1"
+        );
+    }
+
+    #[test]
+    fn with_call_id_replacing_host_only() {
+        let r = SipReplaces::parse("abc123@203.0.113.5;to-tag=t1;from-tag=f1").unwrap();
+        let host = r
+            .host()
+            .unwrap();
+        let call_id = format!(
+            "{}example.com",
+            &r.call_id()[..r
+                .call_id()
+                .len()
+                - host.len()]
+        );
+        let r = r
+            .with_call_id(call_id)
+            .unwrap();
+        assert_eq!(r.call_id(), "abc123@example.com");
+    }
+
+    #[test]
+    fn with_call_id_rejects_non_word() {
+        let r = SipReplaces::parse("abc@example.com;to-tag=t1;from-tag=f1").unwrap();
+        for bad in [
+            "",
+            "a;to-tag=t2",
+            "a,b",
+            "a b",
+            "a\r\nSubject: x",
+            "a@b@c",
+            "a@",
+            "@b",
+            "a@ b",
+        ] {
+            assert!(
+                r.clone()
+                    .with_call_id(bad)
+                    .is_err(),
+                "accepted {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn with_call_id_accepts_full_word_charset() {
+        let call_id = "a%b!*_+`'~()<>:\\\"/[]?{}.-@example.com";
+        let r = SipReplaces::parse("abc@example.com;to-tag=t1;from-tag=f1")
+            .unwrap()
+            .with_call_id(call_id)
+            .unwrap();
+        assert_eq!(r.call_id(), call_id);
+    }
+
+    #[test]
     fn from_str_is_wire_framing() {
         let r: SipReplaces = "abc123@203.0.113.5;to-tag=t1;from-tag=f1"
             .parse()

@@ -198,6 +198,45 @@ mod tests {
     }
 
     #[test]
+    fn with_call_id_wire_changes_only_call_id() {
+        let input = "abc123@203.0.113.5;local-tag=l1;remote-tag=r1;foo=bar";
+        let t = SipTargetDialog::parse(input)
+            .unwrap()
+            .with_call_id("xyz789@example.com")
+            .unwrap();
+        assert_eq!(
+            t.to_string(),
+            "xyz789@example.com;local-tag=l1;remote-tag=r1;foo=bar"
+        );
+    }
+
+    #[test]
+    fn with_call_id_keeps_uri_header_framing() {
+        let input = "abc123%40203.0.113.5%3Blocal-tag%3Dl1%3Bremote-tag%3Dr1";
+        let t = SipTargetDialog::parse_uri_header(input)
+            .unwrap()
+            .with_call_id("abc123@example.com")
+            .unwrap();
+        assert_eq!(
+            t.to_string(),
+            "abc123%40example.com%3Blocal-tag%3Dl1%3Bremote-tag%3Dr1"
+        );
+    }
+
+    #[test]
+    fn with_call_id_rejects_non_word() {
+        let t = SipTargetDialog::parse("abc@example.com;local-tag=l1;remote-tag=r1").unwrap();
+        for bad in ["", "a;local-tag=l2", "a b", "a@b@c", "@b"] {
+            assert!(
+                t.clone()
+                    .with_call_id(bad)
+                    .is_err(),
+                "accepted {bad:?}"
+            );
+        }
+    }
+
+    #[test]
     fn from_str_is_wire_framing() {
         let t: SipTargetDialog = "abc123@203.0.113.5;local-tag=l1;remote-tag=r1"
             .parse()

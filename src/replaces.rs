@@ -134,56 +134,11 @@ pub(crate) fn parse_dialog_id(
     })
 }
 
-fn is_word_char(c: char) -> bool {
-    c.is_ascii_alphanumeric()
-        || matches!(
-            c,
-            '-' | '.'
-                | '!'
-                | '%'
-                | '*'
-                | '_'
-                | '+'
-                | '`'
-                | '\''
-                | '~'
-                | '('
-                | ')'
-                | '<'
-                | '>'
-                | ':'
-                | '\\'
-                | '"'
-                | '/'
-                | '['
-                | ']'
-                | '?'
-                | '{'
-                | '}'
-        )
-}
-
 /// Validate `callid = word [ "@" word ]` (RFC 3261 §25.1).
 pub(crate) fn validate_call_id(raw: &str) -> Result<(), DialogIdError> {
-    let (word, host) = match raw.split_once('@') {
-        Some((word, host)) => (word, Some(host)),
-        None => (raw, None),
-    };
-    for part in std::iter::once(word).chain(host) {
-        if part.is_empty() {
-            return Err(DialogIdError::Invalid("empty call-id word".to_string()));
-        }
-        if let Some(c) = part
-            .chars()
-            .find(|c| !is_word_char(*c))
-        {
-            return Err(DialogIdError::Invalid(format!(
-                "call-id contains {:?}, not an RFC 3261 word character",
-                c
-            )));
-        }
-    }
-    Ok(())
+    crate::call_id::SipCallId::parse(raw)
+        .map(|_| ())
+        .map_err(|e| DialogIdError::Invalid(e.to_string()))
 }
 
 /// Decode a percent-encoded URI-header value for dialog-id parsing.

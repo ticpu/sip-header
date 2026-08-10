@@ -34,6 +34,7 @@ pub mod accept;
 pub mod accept_encoding;
 pub mod accept_language;
 pub mod auth;
+pub mod call_id;
 #[cfg(feature = "conference-info")]
 pub mod conference_info;
 pub mod contact;
@@ -54,6 +55,7 @@ pub use accept::{SipAccept, SipAcceptEntry, SipAcceptError};
 pub use accept_encoding::{SipAcceptEncoding, SipAcceptEncodingEntry, SipAcceptEncodingError};
 pub use accept_language::{SipAcceptLanguage, SipAcceptLanguageEntry, SipAcceptLanguageError};
 pub use auth::{SipAuthError, SipAuthValue};
+pub use call_id::{SipCallId, SipCallIdError};
 pub use contact::ContactValue;
 pub use geolocation::{SipGeolocation, SipGeolocationRef};
 pub use header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};

@@ -3,7 +3,7 @@
 
 set -e
 
-SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
 # Cargo.lock belongs only on the detached commit a release tag points at, so a
 # release build resolves an exact dependency set while master stays a library

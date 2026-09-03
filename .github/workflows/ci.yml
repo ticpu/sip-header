@@ -10,10 +10,27 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+
+    # Lib only: dev-dependencies are free to require a newer toolchain than
+    # what we promise published consumers.
+    - name: Read rust-version from Cargo.toml
+      run: echo "MSRV=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].rust_version')" >> "$GITHUB_ENV"
+
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ env.MSRV }}
+
+    - name: Check (all features)
+      run: cargo check --all-features
+
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
 
     - name: Cargo.lock must not be tracked
       run: |
@@ -26,7 +43,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Cache cargo
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           ~/.cargo/bin/
@@ -73,7 +90,7 @@ jobs:
 
     - name: Update test count badge
       if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-      uses: schneegans/dynamic-badges-action@v1.7.0
+      uses: schneegans/dynamic-badges-action@v1.9.0
       with:
         auth: ${{ secrets.GIST_SECRET }}
         gistID: 9f50aa47ea72d91eb2033a1c48f40246
@@ -84,7 +101,7 @@ jobs:
 
     - name: Update SipHeader IANA sync badge
       if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-      uses: schneegans/dynamic-badges-action@v1.7.0
+      uses: schneegans/dynamic-badges-action@v1.9.0
       with:
         auth: ${{ secrets.GIST_SECRET }}
         gistID: 9f50aa47ea72d91eb2033a1c48f40246
@@ -95,7 +112,7 @@ jobs:
 
     - name: Update SipHeaderLookup accessor badge
       if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-      uses: schneegans/dynamic-badges-action@v1.7.0
+      uses: schneegans/dynamic-badges-action@v1.9.0
       with:
         auth: ${{ secrets.GIST_SECRET }}
         gistID: 9f50aa47ea72d91eb2033a1c48f40246

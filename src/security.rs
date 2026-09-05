@@ -262,4 +262,27 @@ mod tests {
         let sec = SipSecurity::parse("digest;d-alg=MD5;d-qop=auth").unwrap();
         assert_eq!(sec.entries()[0].d_alg(), Some("MD5"));
     }
+
+    #[test]
+    fn from_entries_matches_parse() {
+        let split = SipSecurity::from_entries(["tls;q=0.2", "digest;d-qop=auth;q=0.1"]).unwrap();
+        let joined = SipSecurity::parse("tls;q=0.2, digest;d-qop=auth;q=0.1").unwrap();
+        assert_eq!(split, joined);
+    }
+
+    #[test]
+    fn from_entries_bad_entry_is_error() {
+        assert!(matches!(
+            SipSecurity::from_entries(["tls", "   "]),
+            Err(SipSecurityError::InvalidFormat(_))
+        ));
+    }
+
+    #[test]
+    fn from_entries_empty_is_empty_error() {
+        assert!(matches!(
+            SipSecurity::from_entries(std::iter::empty::<&str>()),
+            Err(SipSecurityError::Empty)
+        ));
+    }
 }

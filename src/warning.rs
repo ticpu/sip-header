@@ -427,4 +427,29 @@ mod tests {
         let warning = SipWarning::parse(input).unwrap();
         assert_eq!(warning.entries()[0].text(), r#"Path: C:\temp\file"#);
     }
+
+    #[test]
+    fn from_entries_matches_parse() {
+        let a = r#"301 example.com "text, with comma""#;
+        let b = r#"399 example.org "fine""#;
+        let split = SipWarning::from_entries([a, b]).unwrap();
+        let joined = SipWarning::parse(&format!("{a}, {b}")).unwrap();
+        assert_eq!(split, joined);
+    }
+
+    #[test]
+    fn from_entries_bad_entry_is_error() {
+        assert!(matches!(
+            SipWarning::from_entries([r#"399 example.com "ok""#, "nope"]),
+            Err(SipWarningError::InvalidFormat(_))
+        ));
+    }
+
+    #[test]
+    fn from_entries_empty_is_empty_error() {
+        assert!(matches!(
+            SipWarning::from_entries(std::iter::empty::<&str>()),
+            Err(SipWarningError::Empty)
+        ));
+    }
 }

@@ -548,4 +548,30 @@ mod tests {
         let displayed = via.to_string();
         assert!(displayed.contains("[2001:db8::1]"));
     }
+
+    #[test]
+    fn from_entries_matches_parse() {
+        let a = "SIP/2.0/UDP 198.51.100.1:5060;branch=z9hG4bK1";
+        let b = "SIP/2.0/TCP 203.0.113.5";
+        let split = SipVia::from_entries([a, b]).unwrap();
+        let joined = SipVia::parse(&format!("{a}, {b}")).unwrap();
+        assert_eq!(split, joined);
+        assert_eq!(split.to_string(), format!("{a}, {b}"));
+    }
+
+    #[test]
+    fn from_entries_bad_entry_is_error() {
+        assert!(matches!(
+            SipVia::from_entries(["SIP/2.0/UDP 198.51.100.1", "invalid"]),
+            Err(SipViaError::InvalidFormat(_))
+        ));
+    }
+
+    #[test]
+    fn from_entries_empty_is_empty_error() {
+        assert!(matches!(
+            SipVia::from_entries(std::iter::empty::<&str>()),
+            Err(SipViaError::Empty)
+        ));
+    }
 }

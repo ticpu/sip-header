@@ -104,4 +104,33 @@ mod tests {
             .to_string()
             .contains("alice"));
     }
+
+    #[test]
+    fn entries_matches_list() {
+        let a = "<sip:alice@198.51.100.1>";
+        let b = "\"Bob\" <sip:bob@example.com>;expires=60";
+        let split = parse_contact_entries([a, b]).unwrap();
+        let joined = parse_contact_list(&format!("{a}, {b}")).unwrap();
+        assert_eq!(split, joined);
+        assert_eq!(split.len(), 2);
+    }
+
+    #[test]
+    fn entries_empty_is_empty_list() {
+        let contacts = parse_contact_entries(std::iter::empty::<&str>()).unwrap();
+        assert!(contacts.is_empty());
+    }
+
+    #[test]
+    fn entries_lone_wildcard() {
+        let contacts = parse_contact_entries(["*"]).unwrap();
+        assert_eq!(contacts, vec![ContactValue::Wildcard]);
+    }
+
+    #[test]
+    fn wildcard_mixed_with_addr_is_error() {
+        assert!(parse_contact_entries(["*", "<sip:alice@example.com>"]).is_err());
+        assert!(parse_contact_entries(["<sip:alice@example.com>", "*"]).is_err());
+        assert!(parse_contact_list("*, <sip:alice@example.com>").is_err());
+    }
 }

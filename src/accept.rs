@@ -266,4 +266,29 @@ mod tests {
         let accept = SipAccept::parse(raw).unwrap();
         assert_eq!(accept.to_string(), raw);
     }
+
+    #[test]
+    fn from_entries_matches_parse() {
+        let a = "application/sdp";
+        let b = "application/pidf+xml;q=0.5";
+        let split = SipAccept::from_entries([a, b]).unwrap();
+        let joined = SipAccept::parse(&format!("{a}, {b}")).unwrap();
+        assert_eq!(split, joined);
+    }
+
+    #[test]
+    fn from_entries_bad_entry_is_error() {
+        assert!(matches!(
+            SipAccept::from_entries(["application/sdp", "noslash"]),
+            Err(SipAcceptError::InvalidFormat(_))
+        ));
+    }
+
+    #[test]
+    fn from_entries_empty_is_empty_error() {
+        assert!(matches!(
+            SipAccept::from_entries(std::iter::empty::<&str>()),
+            Err(SipAcceptError::Empty)
+        ));
+    }
 }

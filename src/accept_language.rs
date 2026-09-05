@@ -228,4 +228,27 @@ mod tests {
         let al = SipAcceptLanguage::parse(raw).unwrap();
         assert_eq!(al.to_string(), raw);
     }
+
+    #[test]
+    fn from_entries_matches_parse() {
+        let split = SipAcceptLanguage::from_entries(["en;q=0.9", "fr-CA"]).unwrap();
+        let joined = SipAcceptLanguage::parse("en;q=0.9, fr-CA").unwrap();
+        assert_eq!(split, joined);
+    }
+
+    #[test]
+    fn from_entries_bad_entry_is_error() {
+        assert!(matches!(
+            SipAcceptLanguage::from_entries(["en", "   "]),
+            Err(SipAcceptLanguageError::InvalidFormat(_))
+        ));
+    }
+
+    #[test]
+    fn from_entries_empty_is_empty_error() {
+        assert!(matches!(
+            SipAcceptLanguage::from_entries(std::iter::empty::<&str>()),
+            Err(SipAcceptLanguageError::Empty)
+        ));
+    }
 }

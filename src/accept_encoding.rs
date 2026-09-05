@@ -227,4 +227,27 @@ mod tests {
         let ae = SipAcceptEncoding::parse(raw).unwrap();
         assert_eq!(ae.to_string(), raw);
     }
+
+    #[test]
+    fn from_entries_matches_parse() {
+        let split = SipAcceptEncoding::from_entries(["gzip;q=0.8", "identity"]).unwrap();
+        let joined = SipAcceptEncoding::parse("gzip;q=0.8, identity").unwrap();
+        assert_eq!(split, joined);
+    }
+
+    #[test]
+    fn from_entries_bad_entry_is_error() {
+        assert!(matches!(
+            SipAcceptEncoding::from_entries(["gzip", "   "]),
+            Err(SipAcceptEncodingError::InvalidFormat(_))
+        ));
+    }
+
+    #[test]
+    fn from_entries_empty_is_empty_error() {
+        assert!(matches!(
+            SipAcceptEncoding::from_entries(std::iter::empty::<&str>()),
+            Err(SipAcceptEncodingError::Empty)
+        ));
+    }
 }

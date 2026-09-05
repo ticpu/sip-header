@@ -1600,3 +1600,278 @@ mod special_case_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod multi_row_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn rows(pairs: &[(&str, &[&str])]) -> HashMap<String, Vec<String>> {
+        pairs
+            .iter()
+            .map(|(k, vs)| {
+                (
+                    k.to_string(),
+                    vs.iter()
+                        .map(|v| v.to_string())
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn via_reads_every_row() {
+        let h = rows(&[(
+            "Via",
+            &[
+                "SIP/2.0/UDP 198.51.100.1;branch=z9hG4bK1",
+                "SIP/2.0/TCP 203.0.113.5",
+            ],
+        )]);
+        let via = h
+            .via()
+            .unwrap()
+            .unwrap();
+        assert_eq!(via.len(), 2);
+        assert_eq!(via.entries()[1].transport(), "TCP");
+    }
+
+    #[test]
+    fn via_row_with_list_plus_row() {
+        let h = rows(&[(
+            "Via",
+            &[
+                "SIP/2.0/UDP 198.51.100.1, SIP/2.0/UDP 198.51.100.2",
+                "SIP/2.0/TCP 203.0.113.5",
+            ],
+        )]);
+        assert_eq!(
+            h.via()
+                .unwrap()
+                .unwrap()
+                .len(),
+            3
+        );
+    }
+
+    #[test]
+    fn via_blank_rows() {
+        let h = rows(&[("Via", &[""])]);
+        assert!(matches!(h.via(), Err(SipViaError::Empty)));
+        let h = rows(&[("Via", &["   "])]);
+        assert!(matches!(h.via(), Err(SipViaError::InvalidFormat(_))));
+    }
+
+    #[test]
+    fn typed_lists_read_every_row() {
+        let h = rows(&[
+            (
+                "Warning",
+                &[r#"301 example.com "a""#, r#"399 example.org "b""#],
+            ),
+            ("Accept", &["application/sdp", "text/plain"]),
+            ("Accept-Encoding", &["gzip", "identity"]),
+            ("Accept-Language", &["en", "fr"]),
+            ("Security-Client", &["tls", "digest"]),
+            ("Security-Server", &["tls", "digest"]),
+            ("Security-Verify", &["tls", "digest"]),
+            (
+                "Call-Info",
+                &["<http://example.com/a>", "<http://example.com/b>"],
+            ),
+            (
+                "Alert-Info",
+                &["<http://example.com/a>", "<http://example.com/b>"],
+            ),
+            (
+                "Error-Info",
+                &["<http://example.com/a>", "<http://example.com/b>"],
+            ),
+            (
+                "History-Info",
+                &[
+                    "<sip:a@example.com>;index=1",
+                    "<sip:b@example.com>;index=1.1",
+                ],
+            ),
+        ]);
+        assert_eq!(
+            h.warning()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.accept()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.accept_encoding()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.accept_language()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.security_client()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.security_server()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.security_verify()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.call_info()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.alert_info()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.error_info()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.history_info()
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn contact_reads_every_row() {
+        let h = rows(&[(
+            "Contact",
+            &[
+                "<sip:a@example.com>",
+                "<sip:b@example.com>, <sip:c@example.com>",
+            ],
+        )]);
+        assert_eq!(
+            h.contact()
+                .unwrap()
+                .len(),
+            3
+        );
+        let h = rows(&[("Contact", &["*", "<sip:a@example.com>"])]);
+        assert!(h
+            .contact()
+            .is_err());
+        let h = rows(&[("Contact", &[""])]);
+        assert!(h
+            .contact()
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn token_lists_read_every_row() {
+        let h = rows(&[
+            ("Allow", &["INVITE, ACK", "BYE"]),
+            ("Supported", &["100rel", "timer"]),
+            ("Require", &["100rel", "timer"]),
+            ("Proxy-Require", &["100rel", "timer"]),
+            ("Unsupported", &["100rel", "timer"]),
+            ("Allow-Events", &["dialog", "presence"]),
+            ("Content-Encoding", &["gzip", "identity"]),
+            ("Content-Language", &["en", "fr"]),
+            ("In-Reply-To", &["a@example.com", "b@example.com"]),
+        ]);
+        assert_eq!(h.allow(), vec!["INVITE", "ACK", "BYE"]);
+        assert_eq!(
+            h.supported()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.require_header()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.proxy_require()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.unsupported()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.allow_events()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.content_encoding()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.content_language()
+                .len(),
+            2
+        );
+        assert_eq!(
+            h.in_reply_to()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn token_list_blank_rows() {
+        let h = rows(&[("Allow", &[""])]);
+        assert!(h
+            .allow()
+            .is_empty());
+        let h = rows(&[("Allow", &["   "])]);
+        assert_eq!(h.allow(), vec![""]);
+    }
+
+    #[test]
+    fn addr_list_blank_row_is_error() {
+        let h = rows(&[("Route", &["   "])]);
+        assert!(h
+            .route()
+            .is_err());
+    }
+}

@@ -119,7 +119,14 @@ impl SipAcceptLanguage {
         if raw.is_empty() {
             return Err(SipAcceptLanguageError::Empty);
         }
-        let entries: Vec<_> = crate::split_comma_entries(raw)
+        Self::from_entries(crate::split_comma_entries(raw))
+    }
+
+    /// Build from entries a transport already split; each is one `language`.
+    pub fn from_entries<'a>(
+        entries: impl IntoIterator<Item = &'a str>,
+    ) -> Result<Self, SipAcceptLanguageError> {
+        let entries: Vec<_> = entries
             .into_iter()
             .map(parse_entry)
             .collect::<Result<_, _>>()?;

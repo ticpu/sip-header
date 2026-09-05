@@ -144,7 +144,14 @@ impl SipAccept {
         if raw.is_empty() {
             return Err(SipAcceptError::Empty);
         }
-        let entries: Vec<_> = crate::split_comma_entries(raw)
+        Self::from_entries(crate::split_comma_entries(raw))
+    }
+
+    /// Build from entries a transport already split; each is one `accept-range`.
+    pub fn from_entries<'a>(
+        entries: impl IntoIterator<Item = &'a str>,
+    ) -> Result<Self, SipAcceptError> {
+        let entries: Vec<_> = entries
             .into_iter()
             .map(parse_accept_entry)
             .collect::<Result<_, _>>()?;

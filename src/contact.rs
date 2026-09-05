@@ -40,14 +40,29 @@ fn parse_contact_entry(raw: &str) -> Result<ContactValue, ParseSipHeaderAddrErro
 
 /// Parse a comma-separated Contact header value into a list of [`ContactValue`].
 pub fn parse_contact_list(raw: &str) -> Result<Vec<ContactValue>, ParseSipHeaderAddrError> {
-    let trimmed = raw.trim();
-    if trimmed == "*" {
-        return Ok(vec![ContactValue::Wildcard]);
-    }
-    crate::split_comma_entries(trimmed)
+    parse_contact_entries(crate::split_comma_entries(raw.trim()))
+}
+
+/// Build from entries a transport already split; each is `*` or one `contact-param`.
+///
+/// `*` is only valid alone (RFC 3261 §20.10 `STAR / (contact-param *(COMMA contact-param))`).
+pub fn parse_contact_entries<'a>(
+    entries: impl IntoIterator<Item = &'a str>,
+) -> Result<Vec<ContactValue>, ParseSipHeaderAddrError> {
+    let values: Vec<_> = entries
         .into_iter()
         .map(parse_contact_entry)
-        .collect()
+        .collect::<Result<_, _>>()?;
+    if values.len() > 1
+        && values
+            .iter()
+            .any(|v| matches!(v, ContactValue::Wildcard))
+    {
+        return Err(ParseSipHeaderAddrError(
+            "Contact wildcard must be the only value".to_string(),
+        ));
+    }
+    Ok(values)
 }
 
 #[cfg(test)]

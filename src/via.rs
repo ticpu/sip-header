@@ -245,18 +245,20 @@ impl SipVia {
         if raw.is_empty() {
             return Err(SipViaError::Empty);
         }
+        Self::from_entries(crate::split_comma_entries(raw))
+    }
 
-        let parts = crate::split_comma_entries(raw);
-        let mut entries = Vec::new();
-
-        for part in parts {
-            entries.push(SipViaEntry::parse(part)?);
-        }
-
+    /// Build from entries a transport already split; each is one `via-parm`.
+    pub fn from_entries<'a>(
+        entries: impl IntoIterator<Item = &'a str>,
+    ) -> Result<Self, SipViaError> {
+        let entries = entries
+            .into_iter()
+            .map(SipViaEntry::parse)
+            .collect::<Result<Vec<_>, _>>()?;
         if entries.is_empty() {
             return Err(SipViaError::Empty);
         }
-
         Ok(Self { entries })
     }
 

@@ -486,20 +486,22 @@ pub trait SipHeaderLookup {
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     fn call_info(&self) -> Result<Option<UriInfo>, UriInfoError> {
-        match self.sip_header(SipHeader::CallInfo) {
-            Some(s) => UriInfo::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::CallInfo);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        UriInfo::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse the `History-Info` header into a [`HistoryInfo`].
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     fn history_info(&self) -> Result<Option<HistoryInfo>, HistoryInfoError> {
-        match self.sip_header(SipHeader::HistoryInfo) {
-            Some(s) => HistoryInfo::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::HistoryInfo);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        HistoryInfo::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `P-Asserted-Identity` into a list of [`SipHeaderAddr`].
@@ -540,79 +542,79 @@ pub trait SipHeaderLookup {
     /// The Contact header may contain `*` (wildcard, used in REGISTER) or
     /// a comma-separated list of name-addr/addr-spec entries.
     fn contact(&self) -> Result<Vec<ContactValue>, ParseSipHeaderAddrError> {
-        match self.sip_header(SipHeader::Contact) {
-            Some(s) => crate::contact::parse_contact_list(s),
-            None => Ok(Vec::new()),
-        }
+        crate::contact::parse_contact_entries(split_all(self.sip_header_all(SipHeader::Contact)))
     }
 
     /// Parse `Alert-Info` into a [`UriInfo`] (RFC 3261 §20.4).
     fn alert_info(&self) -> Result<Option<UriInfo>, UriInfoError> {
-        match self.sip_header(SipHeader::AlertInfo) {
-            Some(s) => UriInfo::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::AlertInfo);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        UriInfo::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `Error-Info` into a [`UriInfo`] (RFC 3261 §20.18).
     fn error_info(&self) -> Result<Option<UriInfo>, UriInfoError> {
-        match self.sip_header(SipHeader::ErrorInfo) {
-            Some(s) => UriInfo::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::ErrorInfo);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        UriInfo::from_entries(split_all(rows)).map(Some)
     }
 
     /// `Allow` header values as individual method tokens (RFC 3261 §20.5).
     fn allow(&self) -> Vec<&str> {
-        split_trim(self.sip_header(SipHeader::Allow))
+        split_trim(self.sip_header_all(SipHeader::Allow))
     }
 
     /// `Supported` header values as individual option-tag tokens (RFC 3261 §20.37).
     fn supported(&self) -> Vec<&str> {
-        split_trim(self.sip_header(SipHeader::Supported))
+        split_trim(self.sip_header_all(SipHeader::Supported))
     }
 
     /// `Require` header values as individual option-tag tokens (RFC 3261 §20.32).
     fn require_header(&self) -> Vec<&str> {
-        split_trim(self.sip_header(SipHeader::Require))
+        split_trim(self.sip_header_all(SipHeader::Require))
     }
 
     /// `Proxy-Require` values as individual option-tag tokens (RFC 3261 §20.29).
     fn proxy_require(&self) -> Vec<&str> {
-        split_trim(self.sip_header(SipHeader::ProxyRequire))
+        split_trim(self.sip_header_all(SipHeader::ProxyRequire))
     }
 
     /// `Unsupported` values as individual option-tag tokens (RFC 3261 §20.40).
     fn unsupported(&self) -> Vec<&str> {
-        split_trim(self.sip_header(SipHeader::Unsupported))
+        split_trim(self.sip_header_all(SipHeader::Unsupported))
     }
 
     /// `Allow-Events` values as individual event-type tokens (RFC 6665).
     fn allow_events(&self) -> Vec<&str> {
-        split_trim(self.sip_header(SipHeader::AllowEvents))
+        split_trim(self.sip_header_all(SipHeader::AllowEvents))
     }
 
     /// `Content-Encoding` values as individual tokens (RFC 3261 §20.12).
     fn content_encoding(&self) -> Vec<&str> {
-        split_trim(self.sip_header(SipHeader::ContentEncoding))
+        split_trim(self.sip_header_all(SipHeader::ContentEncoding))
     }
 
     /// `Content-Language` values as individual language tags (RFC 3261 §20.13).
     fn content_language(&self) -> Vec<&str> {
-        split_trim(self.sip_header(SipHeader::ContentLanguage))
+        split_trim(self.sip_header_all(SipHeader::ContentLanguage))
     }
 
     /// `In-Reply-To` values as individual Call-ID tokens (RFC 3261 §20.21).
     fn in_reply_to(&self) -> Vec<&str> {
-        split_trim(self.sip_header(SipHeader::InReplyTo))
+        split_trim(self.sip_header_all(SipHeader::InReplyTo))
     }
 
     /// Parse `Via` into a [`SipVia`] (RFC 3261 §20.42).
     fn via(&self) -> Result<Option<SipVia>, SipViaError> {
-        match self.sip_header(SipHeader::Via) {
-            Some(s) => SipVia::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::Via);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        SipVia::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `Replaces` into a [`SipReplaces`] (RFC 3891 §6.1).
@@ -679,58 +681,65 @@ pub trait SipHeaderLookup {
 
     /// Parse `Warning` into a [`SipWarning`] (RFC 3261 §20.43).
     fn warning(&self) -> Result<Option<SipWarning>, SipWarningError> {
-        match self.sip_header(SipHeader::Warning) {
-            Some(s) => SipWarning::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::Warning);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        SipWarning::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `Security-Client` into a [`SipSecurity`] (RFC 3329).
     fn security_client(&self) -> Result<Option<SipSecurity>, SipSecurityError> {
-        match self.sip_header(SipHeader::SecurityClient) {
-            Some(s) => SipSecurity::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::SecurityClient);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        SipSecurity::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `Security-Server` into a [`SipSecurity`] (RFC 3329).
     fn security_server(&self) -> Result<Option<SipSecurity>, SipSecurityError> {
-        match self.sip_header(SipHeader::SecurityServer) {
-            Some(s) => SipSecurity::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::SecurityServer);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        SipSecurity::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `Security-Verify` into a [`SipSecurity`] (RFC 3329).
     fn security_verify(&self) -> Result<Option<SipSecurity>, SipSecurityError> {
-        match self.sip_header(SipHeader::SecurityVerify) {
-            Some(s) => SipSecurity::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::SecurityVerify);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        SipSecurity::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `Accept` into a [`SipAccept`] (RFC 3261 §20.1).
     fn accept(&self) -> Result<Option<SipAccept>, SipAcceptError> {
-        match self.sip_header(SipHeader::Accept) {
-            Some(s) => SipAccept::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::Accept);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        SipAccept::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `Accept-Encoding` into a [`SipAcceptEncoding`] (RFC 3261 §20.2).
     fn accept_encoding(&self) -> Result<Option<SipAcceptEncoding>, SipAcceptEncodingError> {
-        match self.sip_header(SipHeader::AcceptEncoding) {
-            Some(s) => SipAcceptEncoding::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::AcceptEncoding);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        SipAcceptEncoding::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `Accept-Language` into a [`SipAcceptLanguage`] (RFC 3261 §20.3).
     fn accept_language(&self) -> Result<Option<SipAcceptLanguage>, SipAcceptLanguageError> {
-        match self.sip_header(SipHeader::AcceptLanguage) {
-            Some(s) => SipAcceptLanguage::parse(s).map(Some),
-            None => Ok(None),
+        let rows = self.sip_header_all(SipHeader::AcceptLanguage);
+        if rows.is_empty() {
+            return Ok(None);
         }
+        SipAcceptLanguage::from_entries(split_all(rows)).map(Some)
     }
 
     /// Parse `Diversion` into a list of [`SipHeaderAddr`] (draft-levy-sip-diversion-08).
@@ -746,12 +755,13 @@ pub trait SipHeaderLookup {
     }
 }
 
-fn parse_addr_list(raw: Vec<&str>) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
-    if raw.is_empty() {
-        return Ok(Vec::new());
-    }
-    raw.into_iter()
-        .flat_map(|s| crate::split_comma_entries(s))
+fn split_all(rows: Vec<&str>) -> impl Iterator<Item = &str> {
+    rows.into_iter()
+        .flat_map(crate::split_comma_entries)
+}
+
+fn parse_addr_list(rows: Vec<&str>) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderAddrError> {
+    split_all(rows)
         .map(|s| {
             s.trim()
                 .parse::<SipHeaderAddr>()
@@ -759,14 +769,10 @@ fn parse_addr_list(raw: Vec<&str>) -> Result<Vec<SipHeaderAddr>, ParseSipHeaderA
         .collect()
 }
 
-fn split_trim(raw: Option<&str>) -> Vec<&str> {
-    match raw {
-        Some(s) => crate::split_comma_entries(s)
-            .into_iter()
-            .map(str::trim)
-            .collect(),
-        None => Vec::new(),
-    }
+fn split_trim(rows: Vec<&str>) -> Vec<&str> {
+    split_all(rows)
+        .map(str::trim)
+        .collect()
 }
 
 impl SipHeaderLookup for std::collections::HashMap<String, String> {

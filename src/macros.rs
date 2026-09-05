@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn generated_error_display() {
         let e = ParseTestEnumError("nope".to_string());
-        assert_eq!(e.to_string(), "unknown test value: nope");
+        assert_eq!(e.to_string(), "unknown test value (4 bytes)");
     }
 
     #[test]

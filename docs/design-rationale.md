@@ -119,7 +119,11 @@ Proxy-Authorization, WWW-Authenticate, and Proxy-Authenticate. Returning
 `Vec<String>` preserves per-occurrence boundaries and lets the caller
 decide whether joining is appropriate. The `SipHeaderLookup` trait gained
 `sip_header_all_str` / `sip_header_all` to expose multi-occurrence
-values from any backing store.
+values from any backing store, and every list accessor on the trait reads
+through them, splitting each row untrimmed: a present row that is only
+whitespace surfaces the entry parser's error rather than `Empty`, because
+trimming would turn a blank list header into an empty list instead of an
+error.
 
 ## Catalog parse errors never carry the rejected bytes in Display
 
@@ -128,3 +132,10 @@ of the rejected input, never the input; the bytes stay on the public field for
 a caller that decides to print them. Display reaches every consumer's `{e}`
 log line outside whatever redaction the consumer applies, and a rejected header
 or variable name is wire content.
+
+## List-valued types take pre-split entries
+
+Every comma-list type has a `from_entries` constructor beside `parse`, each
+keeping that type's strictness. A caller holding entries a transport already
+delimited never re-joins them for `parse`: the second split is a guess over
+boundaries already drawn, and it hides which layer produced a bad entry.

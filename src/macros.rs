@@ -9,10 +9,11 @@
 /// Two error forms:
 ///
 /// - `error_type: ParseMyEnumError,` — the error newtype is defined separately
-///   by the caller as `struct ParseMyEnumError(pub String)`.
+///   by the caller as `struct ParseMyEnumError(pub String)`; its `Display` is
+///   the caller's to keep free of the input.
 /// - `error_type: ParseMyEnumError => "unknown my value",` — the newtype, its
-///   `Display` (`"unknown my value: {input}"`), and `std::error::Error` are
-///   generated.
+///   `Display` (`"unknown my value (<n> bytes)"`, the rejected input stays on
+///   the field), and `std::error::Error` are generated.
 ///
 /// An optional leading `tests_mod: my_enum_tests,` generates a `#[cfg(test)]`
 /// module with round-trip, case-insensitivity, `Display`, and unknown-input
@@ -45,13 +46,13 @@ macro_rules! define_header_enum {
         }
     ) => {
         $(
-            #[doc = concat!("Error for an unrecognized value; displays as `", $err_msg, ": <input>`.")]
+            #[doc = concat!("Error for an unrecognized value; displays as `", $err_msg, " (<n> bytes)`. The rejected input is the field.")]
             #[derive(Debug, Clone, PartialEq, Eq)]
             $vis struct $Err(pub String);
 
             impl std::fmt::Display for $Err {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    write!(f, concat!($err_msg, ": {}"), self.0)
+                    write!(f, concat!($err_msg, " ({} bytes)"), self.0.len())
                 }
             }
 

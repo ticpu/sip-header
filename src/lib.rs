@@ -214,4 +214,27 @@ mod tests {
         let parts = split_comma_entries(input);
         assert_eq!(parts.len(), 2);
     }
+
+    #[test]
+    fn split_comma_quote_inside_brackets_confined_to_one_entry() {
+        let input = r#"<https://example.com/a"b>;purpose=icon, <urn:example:call:1>;purpose=info, <https://example.com/c>;purpose=card"#;
+        let parts = split_comma_entries(input);
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[2], " <https://example.com/c>;purpose=card");
+    }
+
+    #[test]
+    fn split_comma_quote_inside_brackets_keeps_later_quoted_param() {
+        let input = r#"<https://example.com/a"b>;purpose=icon, <sip:b@example.com>;note="x,y", <sip:c@example.com>"#;
+        let parts = split_comma_entries(input);
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[1], r#" <sip:b@example.com>;note="x,y""#);
+    }
+
+    #[test]
+    fn split_comma_bracket_inside_quoted_display_name_inert() {
+        let input = r#""a<b" <sip:x@example.com>, <sip:y@example.com>"#;
+        let parts = split_comma_entries(input);
+        assert_eq!(parts.len(), 2);
+    }
 }

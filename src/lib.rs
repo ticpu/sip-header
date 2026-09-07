@@ -151,7 +151,9 @@ pub(crate) fn write_quoted_pair(f: &mut std::fmt::Formatter<'_>, value: &str) ->
 /// at bracket depth zero and outside quoted strings.
 ///
 /// Backslash escapes inside quoted strings (RFC 3261 §25.1 `quoted-pair`)
-/// are respected to avoid premature quote-close on `\"`.
+/// are respected to avoid premature quote-close on `\"`. Quotes are only
+/// significant at bracket depth zero: a stray `"` inside `<...>` (not legal
+/// in any §25.1 URI character set) affects that entry alone.
 pub fn split_comma_entries(raw: &str) -> Vec<&str> {
     let mut entries = Vec::new();
     let mut depth = 0u32;
@@ -166,7 +168,7 @@ pub fn split_comma_entries(raw: &str) -> Vec<&str> {
         }
         match ch {
             '\\' if in_quotes => prev_backslash = true,
-            '"' => in_quotes = !in_quotes,
+            '"' if depth == 0 => in_quotes = !in_quotes,
             '<' if !in_quotes => depth += 1,
             '>' if !in_quotes => depth = depth.saturating_sub(1),
             ',' if depth == 0 && !in_quotes => {

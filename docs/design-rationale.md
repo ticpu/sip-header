@@ -20,6 +20,11 @@ was extended to track quote state (with backslash-escape awareness for
 just without bracket depth tracking. It was deleted and all auth param
 splitting now goes through the shared function.
 
+Quote state is tracked only at bracket depth zero. A conformant header never
+carries a quote inside `<...>` (section 25.1 URI character sets), so the guard
+is free there; on malformed input it keeps a stray quote from holding the
+bracket open and swallowing every entry after it.
+
 ## Auth param quoting: unescaping and qop
 
 ### Quoted-pair round-trip

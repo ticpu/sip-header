@@ -9,6 +9,7 @@ use crate::accept_encoding::{SipAcceptEncoding, SipAcceptEncodingError};
 use crate::accept_language::{SipAcceptLanguage, SipAcceptLanguageError};
 use crate::auth::{SipAuthError, SipAuthValue};
 use crate::contact::ContactValue;
+use crate::geolocation::SipGeolocation;
 use crate::header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 use crate::history_info::{HistoryInfo, HistoryInfoError};
 use crate::replaces::{SipReplaces, SipReplacesError};
@@ -409,6 +410,8 @@ impl SipHeader {
                 | Self::AcceptResourcePriority
                 // RFC 7315
                 | Self::PAssociatedUri
+                // RFC 6442
+                | Self::Geolocation
         ) {
             return true;
         }
@@ -758,6 +761,18 @@ pub trait SipHeaderLookup {
             return Ok(None);
         }
         SipAcceptLanguage::from_entries(split_all(rows)).map(Some)
+    }
+
+    /// Parse every `Geolocation` row into a [`SipGeolocation`] (RFC 6442).
+    ///
+    /// Returns `None` if the header is absent; entries that are not a
+    /// `<uri>` are skipped, as in [`SipGeolocation::parse`].
+    fn geolocation(&self) -> Option<SipGeolocation> {
+        let rows = self.sip_header_all(SipHeader::Geolocation);
+        if rows.is_empty() {
+            return None;
+        }
+        Some(SipGeolocation::from_entries(split_all(rows)))
     }
 
     /// Parse `Diversion` into a list of [`SipHeaderAddr`] (draft-levy-sip-diversion-08).

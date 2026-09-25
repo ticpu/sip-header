@@ -1498,6 +1498,13 @@ mod multi_valued_tests {
         assert!(SipHeader::Path.is_multi_valued());
         assert!(SipHeader::ServiceRoute.is_multi_valued());
         assert!(SipHeader::HistoryInfo.is_multi_valued());
+        assert!(SipHeader::Reason.is_multi_valued());
+        assert!(SipHeader::AcceptContact.is_multi_valued());
+        assert!(SipHeader::RejectContact.is_multi_valued());
+        assert!(SipHeader::RequestDisposition.is_multi_valued());
+        assert!(SipHeader::ResourcePriority.is_multi_valued());
+        assert!(SipHeader::AcceptResourcePriority.is_multi_valued());
+        assert!(SipHeader::PAssociatedUri.is_multi_valued());
     }
 
     #[test]
@@ -1870,7 +1877,61 @@ mod multi_row_tests {
             .allow()
             .is_empty());
         let h = rows(&[("Allow", &["   "])]);
-        assert_eq!(h.allow(), vec![""]);
+        assert!(h
+            .allow()
+            .is_empty());
+    }
+
+    #[test]
+    fn token_list_drops_empty_entries() {
+        let h = rows(&[("Allow", &["INVITE, , ACK,", ",BYE"])]);
+        assert_eq!(h.allow(), vec!["INVITE", "ACK", "BYE"]);
+    }
+
+    #[test]
+    fn dialog_id_headers_reject_multiple_rows() {
+        let r = "abc@example.com;to-tag=t1;from-tag=f1";
+        let h = rows(&[("Replaces", &[r, r]), ("Join", &[r, r])]);
+        assert!(matches!(
+            h.replaces(),
+            Err(SipReplacesError::InvalidFormat(_))
+        ));
+        assert!(matches!(h.join(), Err(SipReplacesError::InvalidFormat(_))));
+        let t = "abc@example.com;local-tag=l1;remote-tag=r1";
+        let h = rows(&[("Target-Dialog", &[t, t])]);
+        assert!(matches!(
+            h.target_dialog(),
+            Err(SipTargetDialogError::InvalidFormat(_))
+        ));
+    }
+
+    #[test]
+    fn dialog_id_headers_single_row_and_absent() {
+        let h = rows(&[
+            ("Replaces", &["abc@example.com;to-tag=t1;from-tag=f1"]),
+            (
+                "Target-Dialog",
+                &["abc@example.com;local-tag=l1;remote-tag=r1"],
+            ),
+        ]);
+        assert_eq!(
+            h.replaces()
+                .unwrap()
+                .unwrap()
+                .to_tag(),
+            "t1"
+        );
+        assert_eq!(
+            h.target_dialog()
+                .unwrap()
+                .unwrap()
+                .local_tag(),
+            "l1"
+        );
+        assert!(h
+            .join()
+            .unwrap()
+            .is_none());
     }
 
     #[test]

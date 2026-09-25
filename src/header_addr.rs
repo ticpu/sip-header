@@ -281,27 +281,20 @@ fn parse_header_params(s: &str) -> Vec<(String, Option<String>)> {
         .collect()
 }
 
-/// Check if a display name needs quoting (contains SIP special chars or whitespace).
-fn needs_quoting(name: &str) -> bool {
-    name.bytes()
-        .any(|b| {
-            matches!(
-                b,
-                b'"' | b'\\' | b'<' | b'>' | b',' | b';' | b':' | b'@' | b' ' | b'\t'
-            )
-        })
+/// RFC 3261 §25.1 `token` character.
+fn is_token_char(c: char) -> bool {
+    c.is_ascii_alphanumeric()
+        || matches!(
+            c,
+            '-' | '.' | '!' | '%' | '*' | '_' | '+' | '`' | '\'' | '~'
+        )
 }
 
-/// Escape a display name for use within double quotes.
-fn escape_display_name(name: &str) -> String {
-    let mut out = String::with_capacity(name.len());
-    for c in name.chars() {
-        if matches!(c, '"' | '\\') {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
+/// A display name needs quoting unless it is a single `token`.
+fn needs_quoting(name: &str) -> bool {
+    !name
+        .chars()
+        .all(is_token_char)
 }
 
 impl FromStr for SipHeaderAddr {
@@ -386,7 +379,7 @@ impl fmt::Display for SipHeaderAddr {
         {
             Some(name) if !name.is_empty() => {
                 if needs_quoting(name) {
-                    write!(f, "\"{}\" ", escape_display_name(name))?;
+                    write!(f, "\"{}\" ", crate::escape_quoted_pair(name))?;
                 } else {
                     write!(f, "{name} ")?;
                 }

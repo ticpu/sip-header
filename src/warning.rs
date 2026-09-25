@@ -450,6 +450,14 @@ mod tests {
     }
 
     #[test]
+    fn error_display_omits_input() {
+        let err = SipWarning::parse(r#"secretcode example.com "t""#).unwrap_err();
+        assert!(!err
+            .to_string()
+            .contains("secretcode"));
+    }
+
+    #[test]
     fn from_entries_empty_is_empty_error() {
         assert!(matches!(
             SipWarning::from_entries(std::iter::empty::<&str>()),

@@ -28,6 +28,27 @@ impl fmt::Display for SipGeolocationRef {
     }
 }
 
+/// Read `locationValue = LAQUOT locationURI RAQUOT *(SEMI geoloc-param)`
+/// (RFC 6442 §4.1), keeping only the URI.
+fn parse_ref(entry: &str) -> Option<SipGeolocationRef> {
+    let (inner, _) = entry
+        .trim()
+        .strip_prefix('<')?
+        .split_once('>')?;
+    if inner.is_empty() {
+        return None;
+    }
+    Some(
+        match inner
+            .get(..4)
+            .filter(|scheme| scheme.eq_ignore_ascii_case("cid:"))
+        {
+            Some(_) => SipGeolocationRef::Cid(inner[4..].to_string()),
+            None => SipGeolocationRef::Url(inner.to_string()),
+        },
+    )
+}
+
 /// Parsed SIP Geolocation header value (RFC 6442).
 ///
 /// Contains one or more `<uri>` references, comma-separated. Each reference
@@ -47,25 +68,22 @@ pub struct SipGeolocation(Vec<SipGeolocationRef>);
 
 impl SipGeolocation {
     /// Parse a raw Geolocation header value into typed references.
+    ///
+    /// Entries that are not a `<uri>` are skipped.
     pub fn parse(raw: &str) -> Self {
-        let refs = raw
-            .split(',')
-            .filter_map(|entry| {
-                let entry = entry.trim();
-                let inner = entry
-                    .strip_prefix('<')?
-                    .strip_suffix('>')?;
-                if inner.is_empty() {
-                    return None;
-                }
-                if let Some(id) = inner.strip_prefix("cid:") {
-                    Some(SipGeolocationRef::Cid(id.to_string()))
-                } else {
-                    Some(SipGeolocationRef::Url(inner.to_string()))
-                }
-            })
-            .collect();
-        Self(refs)
+        Self::from_entries(crate::split_comma_entries(raw))
+    }
+
+    /// Build from entries a transport already split; each is one
+    /// `locationValue`. Entries that are not a `<uri>` are skipped, and
+    /// geoloc-params after the `>` are dropped.
+    pub fn from_entries<'a>(entries: impl IntoIterator<Item = &'a str>) -> Self {
+        Self(
+            entries
+                .into_iter()
+                .filter_map(parse_ref)
+                .collect(),
+        )
     }
 
     /// The parsed references as a slice.

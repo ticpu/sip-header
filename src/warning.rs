@@ -78,16 +78,14 @@ impl SipWarningEntry {
                 .all(|c| c.is_ascii_digit())
         {
             return Err(SipWarningError::InvalidFormat(format!(
-                "warn-code must be 3 digits, got '{}'",
-                code_str
+                "warn-code must be 3 digits, got {} bytes",
+                code_str.len()
             )));
         }
 
         let code = code_str
             .parse::<u16>()
-            .map_err(|_| {
-                SipWarningError::InvalidFormat(format!("invalid warn-code '{}'", code_str))
-            })?;
+            .map_err(|_| SipWarningError::InvalidFormat("invalid warn-code".to_string()))?;
 
         let rest = s[space_pos..].trim_start();
 

@@ -3,47 +3,70 @@
 //! quick-xml's serde deserializer matches element names literally, including
 //! any namespace prefix. Since producers use varying prefixes (`confInfo:`,
 //! `ci:`, or the default namespace), we normalize by stripping all prefixes
-//! before deserialization.
+//! before deserialization. Below the root, an element bound to a declared
+//! namespace other than conference-info or the root's is an extension and is
+//! dropped with its subtree, so it cannot pose as a base element.
 
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesEnd, BytesStart, Event};
-use quick_xml::{Reader, Writer};
+use quick_xml::name::{Namespace, ResolveResult};
+use quick_xml::reader::NsReader;
+use quick_xml::Writer;
 
 use super::error::ConferenceInfoError;
+
+const CONFERENCE_INFO_NS: &[u8] = b"urn:ietf:params:xml:ns:conference-info";
 
 /// Strip XML namespace prefixes from element names and remove xmlns
 /// declarations, producing prefix-free XML suitable for serde deserialization.
 pub(super) fn strip_namespace_prefixes(xml: &str) -> Result<String, ConferenceInfoError> {
-    let mut reader = Reader::from_str(xml);
+    let mut reader = NsReader::from_str(xml);
     let mut writer = Writer::new(Vec::new());
+    let mut root_ns: Option<Option<Vec<u8>>> = None;
 
     loop {
-        match reader.read_event() {
-            Ok(Event::Start(ref e)) => {
-                let stripped = strip_start_element(e);
-                writer
-                    .write_event(Event::Start(stripped))
+        let (ns, event) = reader
+            .read_resolved_event()
+            .map_err(xml_err)?;
+        let bound = match ns {
+            ResolveResult::Bound(Namespace(n)) => Some(n.to_vec()),
+            ResolveResult::Unbound | ResolveResult::Unknown(_) => None,
+        };
+        let foreign = match (&root_ns, &bound) {
+            (Some(root), Some(n)) => n != CONFERENCE_INFO_NS && root.as_ref() != Some(n),
+            _ => false,
+        };
+        match event {
+            Event::Start(e) if foreign => {
+                reader
+                    .read_to_end(e.name())
                     .map_err(xml_err)?;
             }
-            Ok(Event::End(ref e)) => {
+            Event::Empty(_) if foreign => {}
+            Event::Start(e) => {
+                root_ns.get_or_insert(bound);
+                writer
+                    .write_event(Event::Start(strip_start_element(&e)))
+                    .map_err(xml_err)?;
+            }
+            Event::Empty(e) => {
+                root_ns.get_or_insert(bound);
+                writer
+                    .write_event(Event::Empty(strip_start_element(&e)))
+                    .map_err(xml_err)?;
+            }
+            Event::End(e) => {
                 let local = local_name_owned(e.name());
                 writer
                     .write_event(Event::End(BytesEnd::new(local)))
                     .map_err(xml_err)?;
             }
-            Ok(Event::Empty(ref e)) => {
-                let stripped = strip_start_element(e);
-                writer
-                    .write_event(Event::Empty(stripped))
-                    .map_err(xml_err)?;
-            }
-            Ok(Event::Eof) => break,
-            Ok(other) => {
+            Event::Eof => break,
+            other => {
                 writer
                     .write_event(other)
                     .map_err(xml_err)?;
             }
-            Err(e) => return Err(xml_err(e)),
         }
     }
 

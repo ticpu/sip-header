@@ -536,6 +536,72 @@ mod tests {
         assert!(matches!(UriInfo::parse(",,, "), Err(UriInfoError::Empty)));
     }
 
+    #[test]
+    fn semicolon_inside_brackets_stays_in_data() {
+        let entry = parse_entry("<sip:a@example.com;lr>;purpose=icon").unwrap();
+        assert_eq!(entry.data, "sip:a@example.com;lr");
+        assert_eq!(entry.purpose(), Some("icon"));
+        assert_eq!(entry.to_string(), "<sip:a@example.com;lr>;purpose=icon");
+    }
+
+    #[test]
+    fn quoted_param_keeps_semicolon_and_quotes() {
+        let entry = parse_entry(r#"<https://example.com/a>;note="x;y";Purpose=info"#).unwrap();
+        assert_eq!(entry.data, "https://example.com/a");
+        assert_eq!(
+            entry.metadata,
+            vec![
+                ("note".to_string(), r#""x;y""#.to_string()),
+                ("purpose".to_string(), "info".to_string()),
+            ]
+        );
+        assert_eq!(
+            entry.to_string(),
+            r#"<https://example.com/a>;note="x;y";purpose=info"#
+        );
+    }
+
+    #[test]
+    fn sws_around_params() {
+        let entry = parse_entry("<urn:example:1> ; purpose = icon ; flag").unwrap();
+        assert_eq!(
+            entry.metadata,
+            vec![
+                ("purpose".to_string(), "icon".to_string()),
+                ("flag".to_string(), String::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn unbracketed_and_trailing_junk_keep_fallback() {
+        let entry = parse_entry("urn:example:1;purpose=icon").unwrap();
+        assert_eq!(entry.data, "urn:example:1");
+        assert_eq!(entry.purpose(), Some("icon"));
+
+        let entry = parse_entry("<urn:example:1>junk;purpose=icon").unwrap();
+        assert_eq!(entry.data, "urn:example:1>junk");
+        assert_eq!(entry.purpose(), Some("icon"));
+
+        let entry = parse_entry("<urn:example:1;purpose=icon").unwrap();
+        assert_eq!(entry.data, "urn:example:1");
+        assert_eq!(entry.purpose(), Some("icon"));
+    }
+
+    #[test]
+    fn empty_brackets_rejected() {
+        assert!(parse_entry("<>").is_err());
+        assert!(parse_entry("<>;purpose=icon").is_err());
+    }
+
+    #[test]
+    fn missing_angle_brackets_display_omits_input() {
+        let e = UriInfoError::MissingAngleBrackets("secret".to_string());
+        assert!(!e
+            .to_string()
+            .contains("secret"));
+    }
+
     // -- Error variant tests --
 
     #[test]

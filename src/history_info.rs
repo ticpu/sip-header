@@ -434,7 +434,7 @@ mod tests {
             .unwrap();
         assert_eq!(reason.protocol(), "RouteAction");
         assert_eq!(reason.cause(), Some(200));
-        assert_eq!(reason.text(), Some("Normal Next Hop"));
+        assert_eq!(reason.text(), Some("Normal+Next+Hop"));
     }
 
     #[test]
@@ -446,7 +446,7 @@ mod tests {
             .unwrap();
         assert_eq!(reason.protocol(), "SIP");
         assert_eq!(reason.cause(), Some(200));
-        assert_eq!(reason.text(), Some("Legacy routing"));
+        assert_eq!(reason.text(), Some("Legacy+routing"));
     }
 
     #[test]
@@ -561,6 +561,54 @@ mod tests {
     fn parse_reason_unquoted_text() {
         let r = parse_reason("SIP;cause=200;text=OK");
         assert_eq!(r.text(), Some("OK"));
+    }
+
+    #[test]
+    fn parse_reason_quoted_text_hides_cause_lookalike() {
+        let r = parse_reason(r#"SIP;text="because=5";cause=200"#);
+        assert_eq!(r.cause(), Some(200));
+        assert_eq!(r.text(), Some("because=5"));
+    }
+
+    #[test]
+    fn parse_reason_text_unescapes_quoted_pair() {
+        let r = parse_reason(r#"SIP;cause=480;text="say \"hi\"""#);
+        assert_eq!(r.cause(), Some(480));
+        assert_eq!(r.text(), Some(r#"say "hi""#));
+    }
+
+    #[test]
+    fn parse_reason_keys_case_insensitive_and_sws() {
+        let r = parse_reason(r#"SIP ; Cause = 486 ; TEXT = "Busy; here""#);
+        assert_eq!(r.protocol(), "SIP");
+        assert_eq!(r.cause(), Some(486));
+        assert_eq!(r.text(), Some("Busy; here"));
+    }
+
+    #[test]
+    fn parse_reason_key_suffix_not_matched() {
+        let r = parse_reason(r#"SIP;xcause=1;subtext="no";cause=2"#);
+        assert_eq!(r.cause(), Some(2));
+        assert_eq!(r.text(), None);
+    }
+
+    #[test]
+    fn parse_reason_unparseable_cause_is_none() {
+        assert_eq!(parse_reason("SIP;cause=abc").cause(), None);
+        assert_eq!(parse_reason("SIP;cause=70000").cause(), None);
+    }
+
+    #[test]
+    fn reason_plus_is_literal() {
+        let hi = HistoryInfo::parse(
+            "<sip:a@example.com?Reason=SIP%3Bcause%3D200%3Btext%3D%22a%2Bb+c%22>;index=1",
+        )
+        .unwrap();
+        let reason = hi.entries()[0]
+            .reason()
+            .unwrap()
+            .unwrap();
+        assert_eq!(reason.text(), Some("a+b+c"));
     }
 
     // -- Error variant tests --

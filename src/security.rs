@@ -10,6 +10,7 @@ use std::fmt;
 pub struct SipSecurityMechanism {
     mechanism: String,
     params: Vec<(String, Option<String>)>,
+    quoted: Vec<bool>,
 }
 
 impl SipSecurityMechanism {
@@ -53,11 +54,12 @@ impl SipSecurityMechanism {
 impl fmt::Display for SipSecurityMechanism {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.mechanism)?;
-        for (key, value) in &self.params {
-            match value {
-                Some(v) => write!(f, ";{key}={v}")?,
-                None => write!(f, ";{key}")?,
-            }
+        for ((key, value), quoted) in self
+            .params
+            .iter()
+            .zip(&self.quoted)
+        {
+            crate::write_param(f, key, value.as_deref(), *quoted)?;
         }
         Ok(())
     }
@@ -78,7 +80,7 @@ impl fmt::Display for SipSecurityError {
         match self {
             Self::Empty => write!(f, "empty security mechanism value"),
             Self::InvalidFormat(raw) => {
-                write!(f, "invalid security mechanism: {raw}")
+                write!(f, "invalid security mechanism ({} bytes)", raw.len())
             }
         }
     }
@@ -102,32 +104,28 @@ fn parse_mechanism(raw: &str) -> Result<SipSecurityMechanism, SipSecurityError> 
     }
 
     let mechanism = mechanism_part.to_ascii_lowercase();
-    let mut params = Vec::new();
-
-    if let Some(params_str) = params_part {
-        for segment in params_str.split(';') {
-            let segment = segment.trim();
-            if segment.is_empty() {
-                continue;
-            }
-            if let Some((key, value)) = segment.split_once('=') {
-                params.push((
-                    key.trim()
+    let (params, quoted) = crate::parse_params(params_part.unwrap_or(""))
+        .into_iter()
+        .map(|p| {
+            let (value, quoted) = p
+                .unquoted()
+                .map_or((None, false), |(v, q)| (Some(v), q));
+            (
+                (
+                    p.key
                         .to_ascii_lowercase(),
-                    Some(
-                        value
-                            .trim()
-                            .trim_matches('"')
-                            .to_string(),
-                    ),
-                ));
-            } else {
-                params.push((segment.to_ascii_lowercase(), None));
-            }
-        }
-    }
+                    value,
+                ),
+                quoted,
+            )
+        })
+        .unzip();
 
-    Ok(SipSecurityMechanism { mechanism, params })
+    Ok(SipSecurityMechanism {
+        mechanism,
+        params,
+        quoted,
+    })
 }
 
 /// Parsed security mechanism header value.

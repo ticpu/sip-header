@@ -129,18 +129,35 @@ pub(crate) fn escape_quoted_pair(s: &str) -> String {
     result
 }
 
-/// Write a `quoted-string` to a formatter: surrounds with `"` and escapes
-/// embedded quotes/backslashes per RFC 3261 §25.1.
-pub(crate) fn write_quoted_pair(f: &mut std::fmt::Formatter<'_>, value: &str) -> std::fmt::Result {
-    f.write_str("\"")?;
+/// Write a `quoted-string`: surrounds with `"` and escapes embedded
+/// quotes/backslashes per RFC 3261 §25.1.
+pub(crate) fn write_quoted_pair<W: std::fmt::Write + ?Sized>(
+    f: &mut W,
+    value: &str,
+) -> std::fmt::Result {
+    f.write_char('"')?;
     for ch in value.chars() {
         if ch == '"' || ch == '\\' {
-            write!(f, "\\{ch}")?;
-        } else {
-            write!(f, "{ch}")?;
+            f.write_char('\\')?;
+        }
+        f.write_char(ch)?;
+    }
+    f.write_char('"')
+}
+
+/// Byte index of the first `"` not escaped by `quoted-pair`, scanning text
+/// that follows an opening quote.
+fn closing_quote(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => i += 2,
+            b'"' => return Some(i),
+            _ => i += 1,
         }
     }
-    f.write_str("\"")
+    None
 }
 
 /// One `generic-param` (RFC 3261 §25.1) as it appeared on the wire.
@@ -156,15 +173,61 @@ impl RawParam<'_> {
     /// The value without its surrounding quotes and with `quoted-pair`
     /// unescaped, plus whether it was quoted.
     pub(crate) fn unquoted(&self) -> Option<(String, bool)> {
-        let _ = self;
-        None
+        let v = self.value?;
+        Some(if v.len() >= 2 && v.starts_with('"') && v.ends_with('"') {
+            (unescape_quoted_pair(&v[1..v.len() - 1]), true)
+        } else {
+            (v.to_string(), false)
+        })
     }
 }
 
 /// Read `*(SEMI generic-param)`, with or without the leading `;`.
+///
+/// A value opening with `"` runs to its closing quote, so a `;` inside it does
+/// not split; a quote that never closes ends at the next `;` like any value.
 pub(crate) fn parse_params(s: &str) -> Vec<RawParam<'_>> {
-    let _ = s;
-    Vec::new()
+    let mut params = Vec::new();
+    let mut rest = s;
+    loop {
+        rest = rest.trim_start_matches(|c: char| c == ';' || c.is_ascii_whitespace());
+        if rest.is_empty() {
+            return params;
+        }
+        let segment_end = rest
+            .find(';')
+            .unwrap_or(rest.len());
+        let Some(eq) = rest[..segment_end].find('=') else {
+            params.push(RawParam {
+                key: rest[..segment_end].trim_end(),
+                value: None,
+            });
+            rest = &rest[segment_end..];
+            continue;
+        };
+        let key = rest[..eq].trim_end();
+        let value = rest[eq + 1..].trim_start();
+        let value_end = match value
+            .strip_prefix('"')
+            .and_then(closing_quote)
+        {
+            Some(close) => {
+                let after = close + 2;
+                after
+                    + value[after..]
+                        .find(';')
+                        .unwrap_or(value.len() - after)
+            }
+            None => value
+                .find(';')
+                .unwrap_or(value.len()),
+        };
+        params.push(RawParam {
+            key,
+            value: Some(value[..value_end].trim_end()),
+        });
+        rest = &value[value_end..];
+    }
 }
 
 /// Write `;key`, `;key=value`, or `;key="value"` when `quote` is set.
@@ -174,8 +237,19 @@ pub(crate) fn write_param<W: std::fmt::Write + ?Sized>(
     value: Option<&str>,
     quote: bool,
 ) -> std::fmt::Result {
-    let _ = (w, key, value, quote);
-    Ok(())
+    w.write_char(';')?;
+    w.write_str(key)?;
+    match value {
+        None => Ok(()),
+        Some(v) => {
+            w.write_char('=')?;
+            if quote {
+                write_quoted_pair(w, v)
+            } else {
+                w.write_str(v)
+            }
+        }
+    }
 }
 
 /// Split comma-separated header entries respecting angle-bracket nesting
@@ -191,28 +265,27 @@ pub(crate) fn write_param<W: std::fmt::Write + ?Sized>(
 /// significant at bracket depth zero: a stray `"` inside `<...>` (not legal
 /// in any §25.1 URI character set) affects that entry alone.
 pub fn split_comma_entries(raw: &str) -> Vec<&str> {
+    let bytes = raw.as_bytes();
     let mut entries = Vec::new();
     let mut depth = 0u32;
-    let mut in_quotes = false;
-    let mut prev_backslash = false;
     let mut start = 0;
+    let mut i = 0;
 
-    for (i, ch) in raw.char_indices() {
-        if prev_backslash {
-            prev_backslash = false;
-            continue;
-        }
-        match ch {
-            '\\' if in_quotes => prev_backslash = true,
-            '"' if depth == 0 => in_quotes = !in_quotes,
-            '<' if !in_quotes => depth += 1,
-            '>' if !in_quotes => depth = depth.saturating_sub(1),
-            ',' if depth == 0 && !in_quotes => {
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' if depth == 0 => match closing_quote(&raw[i + 1..]) {
+                Some(close) => i += close + 1,
+                None => break,
+            },
+            b'<' => depth += 1,
+            b'>' => depth = depth.saturating_sub(1),
+            b',' if depth == 0 => {
                 entries.push(&raw[start..i]);
                 start = i + 1;
             }
             _ => {}
         }
+        i += 1;
     }
     if start < raw.len() {
         entries.push(&raw[start..]);

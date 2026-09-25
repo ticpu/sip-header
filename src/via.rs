@@ -113,62 +113,20 @@ impl SipViaEntry {
             (trimmed, None)
         };
 
-        // Parse sent-protocol and sent-by
-        let parts: Vec<&str> = main_part
-            .split_whitespace()
-            .collect();
-        if parts.len() != 2 {
-            return Err(SipViaError::InvalidFormat(format!(
-                "expected 'protocol/version/transport host[:port]', got '{}'",
-                main_part
-            )));
-        }
-
-        let sent_protocol = parts[0];
-        let sent_by = parts[1];
-
-        // Parse sent-protocol: protocol-name/version/transport
-        let protocol_parts: Vec<&str> = sent_protocol
-            .split('/')
-            .collect();
-        if protocol_parts.len() != 3 {
-            return Err(SipViaError::InvalidFormat(format!(
-                "expected 'protocol/version/transport', got '{}'",
-                sent_protocol
-            )));
-        }
-
-        let protocol_name = protocol_parts[0].to_string();
-        let protocol_version = protocol_parts[1].to_string();
-        let transport = protocol_parts[2].to_string();
-
-        // Parse sent-by: host[:port]
-        // Handle IPv6 bracket notation [::1]:port
+        let (protocol_name, protocol_version, transport, sent_by) = parse_sent_protocol(main_part)?;
         let (host, port) = parse_host_port(sent_by)?;
 
-        // Parse params
-        let mut params = Vec::new();
-        if let Some(params_str) = params_part {
-            for param in params_str.split(';') {
-                let param = param.trim();
-                if param.is_empty() {
-                    continue;
-                }
-
-                if let Some(eq_idx) = param.find('=') {
-                    let key = param[..eq_idx]
-                        .trim()
-                        .to_ascii_lowercase();
-                    let value = param[eq_idx + 1..]
-                        .trim()
-                        .to_string();
-                    params.push((key, Some(value)));
-                } else {
-                    // Parameter without value (e.g., rport)
-                    params.push((param.to_ascii_lowercase(), None));
-                }
-            }
-        }
+        let params: Vec<(String, Option<String>)> = crate::parse_params(params_part.unwrap_or(""))
+            .into_iter()
+            .map(|p| {
+                (
+                    p.key
+                        .to_ascii_lowercase(),
+                    p.value
+                        .map(str::to_string),
+                )
+            })
+            .collect();
 
         let rport = params
             .iter()
@@ -178,7 +136,7 @@ impl SipViaEntry {
                 Some(s) => s
                     .parse::<u16>()
                     .map(Some)
-                    .map_err(|_| SipViaError::InvalidFormat(format!("invalid rport value: {s}"))),
+                    .map_err(|_| SipViaError::InvalidFormat("invalid rport value".to_string())),
             })
             .transpose()?;
 
@@ -192,6 +150,43 @@ impl SipViaEntry {
             rport,
         })
     }
+}
+
+/// Split `sent-protocol LWS sent-by` into its parts, allowing SWS around
+/// each `/` (RFC 3261 §25.1 `SLASH`).
+fn parse_sent_protocol(main: &str) -> Result<(String, String, String, &str), SipViaError> {
+    let malformed =
+        || SipViaError::InvalidFormat("expected 'protocol/version/transport host[:port]'".into());
+    let (name_raw, rest) = main
+        .split_once('/')
+        .ok_or_else(malformed)?;
+    let (version_raw, after_slash) = rest
+        .split_once('/')
+        .ok_or_else(malformed)?;
+    let (name, version) = (name_raw.trim(), version_raw.trim());
+    let rest = after_slash.trim_start();
+    let (mut transport, mut sent_by) = rest.split_at(
+        rest.find(char::is_whitespace)
+            .unwrap_or(rest.len()),
+    );
+    sent_by = sent_by.trim();
+    // RFC 3261 §25.1 transport is a non-empty token; an empty one directly
+    // before sent-by (`SIP/2.0/ host`) stays accepted.
+    if sent_by.is_empty()
+        && after_slash.starts_with(char::is_whitespace)
+        && name == name_raw
+        && version == version_raw
+    {
+        (transport, sent_by) = ("", transport);
+    }
+    if sent_by.is_empty()
+        || [name, version, transport]
+            .iter()
+            .any(|p| p.contains(|c: char| c == '/' || c.is_whitespace()))
+    {
+        return Err(malformed());
+    }
+    Ok((name.into(), version.into(), transport.into(), sent_by))
 }
 
 impl fmt::Display for SipViaEntry {
@@ -220,11 +215,7 @@ impl fmt::Display for SipViaEntry {
         }
 
         for (key, value) in &self.params {
-            if let Some(val) = value {
-                write!(f, ";{}={}", key, val)?;
-            } else {
-                write!(f, ";{}", key)?;
-            }
+            crate::write_param(f, key, value.as_deref(), false)?;
         }
 
         Ok(())
@@ -313,57 +304,45 @@ impl<'a> IntoIterator for &'a SipVia {
     }
 }
 
+/// Split `sent-by = host [ COLON port ]`, allowing SWS around the colon.
 fn parse_host_port(sent_by: &str) -> Result<(String, Option<u16>), SipViaError> {
-    // Handle IPv6 bracket notation [::1]:port
-    if sent_by.starts_with('[') {
-        // Find the closing bracket
-        if let Some(close_bracket) = sent_by.find(']') {
-            let host = sent_by[1..close_bracket].to_string();
-            let remainder = &sent_by[close_bracket + 1..];
-
-            if remainder.is_empty() {
-                return Ok((host, None));
-            }
-
-            if let Some(port_str) = remainder.strip_prefix(':') {
-                let port = port_str
-                    .parse::<u16>()
-                    .map_err(|_| {
-                        SipViaError::InvalidFormat(format!("invalid port: {}", port_str))
-                    })?;
-                return Ok((host, Some(port)));
-            }
-
-            return Err(SipViaError::InvalidFormat(format!(
-                "unexpected characters after IPv6 address: {}",
-                remainder
-            )));
+    let invalid = |msg: &str| SipViaError::InvalidFormat(msg.to_string());
+    let (host, port) = if let Some(inner) = sent_by.strip_prefix('[') {
+        let close = inner
+            .find(']')
+            .ok_or_else(|| invalid("unclosed IPv6 bracket"))?;
+        let rest = inner[close + 1..].trim_start();
+        let port = if rest.is_empty() {
+            None
         } else {
-            return Err(SipViaError::InvalidFormat(
-                "unclosed IPv6 bracket".to_string(),
-            ));
-        }
-    }
-
-    // IPv4 or hostname with optional port
-    // Find the last colon (to handle IPv6 without brackets, though that's not valid in Via)
-    if let Some(colon_idx) = sent_by.rfind(':') {
-        let host = sent_by[..colon_idx].to_string();
-        let port_str = &sent_by[colon_idx + 1..];
-
-        // Check if this looks like an IPv6 address without brackets (invalid but handle gracefully)
-        if host.contains(':') {
-            // This is likely a bare IPv6 address, return as-is without port
-            return Ok((sent_by.to_string(), None));
-        }
-
-        let port = port_str
-            .parse::<u16>()
-            .map_err(|_| SipViaError::InvalidFormat(format!("invalid port: {}", port_str)))?;
-        Ok((host, Some(port)))
+            Some(
+                rest.strip_prefix(':')
+                    .ok_or_else(|| invalid("unexpected characters after IPv6 reference"))?,
+            )
+        };
+        (&inner[..close], port)
     } else {
-        Ok((sent_by.to_string(), None))
+        match sent_by.split_once(':') {
+            Some((_, port)) if port.contains(':') => {
+                return Err(invalid("IPv6 sent-by must be bracketed"));
+            }
+            Some((host, port)) => (host.trim_end(), Some(port)),
+            None => (sent_by, None),
+        }
+    };
+    if host.contains(char::is_whitespace) {
+        return Err(invalid("whitespace inside sent-by host"));
     }
+    let port = port
+        .map(|p| {
+            p.trim_start()
+                .parse::<u16>()
+                .map_err(|_| {
+                    SipViaError::InvalidFormat(format!("invalid port ({} bytes)", p.len()))
+                })
+        })
+        .transpose()?;
+    Ok((host.to_string(), port))
 }
 
 #[cfg(test)]
@@ -594,6 +573,15 @@ mod tests {
         let via = SipVia::parse("SIP/2.0/UDP [2001:db8::1] : 5060").unwrap();
         let entry = &via.entries()[0];
         assert_eq!(entry.host(), "2001:db8::1");
+        assert_eq!(entry.port(), Some(5060));
+    }
+
+    #[test]
+    fn empty_transport_before_sent_by_accepted() {
+        let via = SipVia::parse("SIP/2.0/ example.com:5060").unwrap();
+        let entry = &via.entries()[0];
+        assert_eq!(entry.transport(), "");
+        assert_eq!(entry.host(), "example.com");
         assert_eq!(entry.port(), Some(5060));
     }
 

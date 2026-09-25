@@ -405,6 +405,13 @@ mod tests {
     }
 
     #[test]
+    fn write_quoted_pair_escapes_controls_outside_qdtext() {
+        let mut s = String::new();
+        write_quoted_pair(&mut s, "a\u{1}b\tc\u{7f}").unwrap();
+        assert_eq!(s, "\"a\\\u{1}b\tc\\\u{7f}\"");
+    }
+
+    #[test]
     fn write_param_forms() {
         let mut s = String::new();
         write_param(&mut s, "lr", None, false).unwrap();

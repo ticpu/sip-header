@@ -570,6 +570,86 @@ mod tests {
     }
 
     #[test]
+    fn sws_around_protocol_slashes() {
+        let via = SipVia::parse("SIP / 2.0 / UDP example.com").unwrap();
+        let entry = &via.entries()[0];
+        assert_eq!(entry.protocol(), "SIP");
+        assert_eq!(entry.version(), "2.0");
+        assert_eq!(entry.transport(), "UDP");
+        assert_eq!(entry.host(), "example.com");
+        assert_eq!(entry.port(), None);
+    }
+
+    #[test]
+    fn sws_around_sent_by_colon() {
+        let via = SipVia::parse("SIP/2.0/UDP example.com : 5060;branch=z9hG4bK1").unwrap();
+        let entry = &via.entries()[0];
+        assert_eq!(entry.host(), "example.com");
+        assert_eq!(entry.port(), Some(5060));
+        assert_eq!(entry.branch(), Some("z9hG4bK1"));
+    }
+
+    #[test]
+    fn sws_around_ipv6_reference_colon() {
+        let via = SipVia::parse("SIP/2.0/UDP [2001:db8::1] : 5060").unwrap();
+        let entry = &via.entries()[0];
+        assert_eq!(entry.host(), "2001:db8::1");
+        assert_eq!(entry.port(), Some(5060));
+    }
+
+    #[test]
+    fn junk_after_sent_by_is_error() {
+        assert!(SipVia::parse("SIP/2.0/UDP example.com extra").is_err());
+        assert!(SipVia::parse("SIP/2.0/UDP/X example.com").is_err());
+        assert!(SipVia::parse("SIP/2.0/UDP").is_err());
+    }
+
+    #[test]
+    fn unbracketed_ipv6_is_error() {
+        assert!(matches!(
+            SipVia::parse("SIP/2.0/UDP 2001:db8::1:5060"),
+            Err(SipViaError::InvalidFormat(_))
+        ));
+        assert!(SipVia::parse("SIP/2.0/UDP 2001:db8::1").is_err());
+    }
+
+    #[test]
+    fn params_keep_trimmed_raw_values() {
+        let via = SipVia::parse("SIP/2.0/UDP example.com ; Branch = z9hG4bK1 ; rport ; x=\"a;b\"")
+            .unwrap();
+        let entry = &via.entries()[0];
+        assert_eq!(
+            entry.params(),
+            &[
+                ("branch".to_string(), Some("z9hG4bK1".to_string())),
+                ("rport".to_string(), None),
+                ("x".to_string(), Some("\"a;b\"".to_string())),
+            ]
+        );
+        assert_eq!(entry.rport(), Some(None));
+        assert_eq!(
+            via.to_string(),
+            "SIP/2.0/UDP example.com;branch=z9hG4bK1;rport;x=\"a;b\""
+        );
+    }
+
+    #[test]
+    fn error_display_omits_input() {
+        for raw in [
+            "SIP/2.0/UDP secret.example.com extra",
+            "SIP/2.0/UDP secret.example.com:99999",
+            "SIP/2.0/UDP [2001:db8::1]secret",
+            "SIP/2.0/UDP example.com;rport=secret",
+            "secret",
+        ] {
+            let err = SipVia::parse(raw).unwrap_err();
+            assert!(!err
+                .to_string()
+                .contains("secret"));
+        }
+    }
+
+    #[test]
     fn from_entries_empty_is_empty_error() {
         assert!(matches!(
             SipVia::from_entries(std::iter::empty::<&str>()),

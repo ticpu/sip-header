@@ -87,7 +87,11 @@ impl fmt::Display for UriInfoError {
         match self {
             Self::Empty => write!(f, "empty URI-info header value"),
             Self::MissingAngleBrackets(raw) => {
-                write!(f, "missing angle brackets in URI-info entry: {raw}")
+                write!(
+                    f,
+                    "missing angle brackets in URI-info entry ({} bytes)",
+                    raw.len()
+                )
             }
             Self::Malformed(reason) => write!(f, "malformed URI-info value: {reason}"),
         }
@@ -102,45 +106,46 @@ fn parse_entry(raw: &str) -> Result<UriInfoEntry, UriInfoError> {
         return Err(UriInfoError::MissingAngleBrackets(raw.to_string()));
     }
 
-    // Split on first ';' to separate the URI from parameters.
-    // This avoids issues with ';' inside URIs before the parameter section.
-    let (data_part, metadata_part) = match raw.split_once(';') {
-        Some((d, m)) => (d, Some(m)),
-        None => (raw, None),
-    };
-
-    let data = data_part
-        .trim()
-        .trim_matches(|c| c == '<' || c == '>')
-        .to_string();
+    let bracketed = raw
+        .strip_prefix('<')
+        .and_then(|s| s.split_once('>'))
+        .filter(|(_, rest)| {
+            let rest = rest.trim_start();
+            rest.is_empty() || rest.starts_with(';')
+        });
+    // Unbracketed or junk after `>` (not RFC 3261 §20.9 grammar): data runs
+    // to the first `;` with stray brackets stripped.
+    let (data, params) = bracketed.unwrap_or_else(|| {
+        let (data, params) = raw
+            .split_once(';')
+            .unwrap_or((raw, ""));
+        (
+            data.trim()
+                .trim_matches(|c| c == '<' || c == '>'),
+            params,
+        )
+    });
     if data.is_empty() {
         return Err(UriInfoError::MissingAngleBrackets(raw.to_string()));
     }
 
-    let mut metadata = Vec::new();
-    if let Some(meta_str) = metadata_part {
-        if !meta_str.is_empty() {
-            for segment in meta_str.split(';') {
-                let segment = segment.trim();
-                if segment.is_empty() {
-                    continue;
-                }
-                if let Some((key, value)) = segment.split_once('=') {
-                    metadata.push((
-                        key.trim()
-                            .to_ascii_lowercase(),
-                        value
-                            .trim()
-                            .to_string(),
-                    ));
-                } else {
-                    metadata.push((segment.to_ascii_lowercase(), String::new()));
-                }
-            }
-        }
-    }
+    let metadata = crate::parse_params(params)
+        .into_iter()
+        .map(|p| {
+            (
+                p.key
+                    .to_ascii_lowercase(),
+                p.value
+                    .unwrap_or("")
+                    .to_string(),
+            )
+        })
+        .collect();
 
-    Ok(UriInfoEntry { data, metadata })
+    Ok(UriInfoEntry {
+        data: data.to_string(),
+        metadata,
+    })
 }
 
 use crate::split_comma_entries;
@@ -161,8 +166,8 @@ impl UriInfo {
     /// when entries have already been split by an external mechanism (e.g.
     /// a transport-specific array encoding).
     ///
-    /// Malformed entries are skipped per RFC 3261 §7.5 error recovery.
-    /// Returns `Err(Empty)` only when all entries fail to parse.
+    /// Entries that fail to parse are skipped; returns `Err(Empty)` only
+    /// when none parse.
     pub fn from_entries<'a>(
         entries: impl IntoIterator<Item = &'a str>,
     ) -> Result<Self, UriInfoError> {

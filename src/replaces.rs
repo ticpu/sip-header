@@ -496,6 +496,44 @@ mod tests {
     }
 
     #[test]
+    fn quoted_param_hides_tag_lookalike() {
+        let r =
+            SipReplaces::parse(r#"a@example.com;x="p;to-tag=evil";to-tag=t;from-tag=f"#).unwrap();
+        assert_eq!(r.call_id(), "a@example.com");
+        assert_eq!(r.to_tag(), "t");
+        assert_eq!(r.from_tag(), "f");
+        assert_eq!(r.param("x"), Some(Some(r#""p;to-tag=evil""#)));
+        assert_eq!(
+            r.to_string(),
+            r#"a@example.com;to-tag=t;from-tag=f;x="p;to-tag=evil""#
+        );
+    }
+
+    #[test]
+    fn unterminated_quote_splits_at_next_semicolon() {
+        let r = SipReplaces::parse(r#"a;x="p;to-tag=t;from-tag=f"#).unwrap();
+        assert_eq!(r.to_tag(), "t");
+        assert_eq!(r.from_tag(), "f");
+        assert_eq!(r.param("x"), Some(Some(r#""p"#)));
+    }
+
+    #[test]
+    fn call_id_with_quote_splits_at_first_semicolon() {
+        let r = SipReplaces::parse(r#"a"b@example.com;to-tag=t;from-tag=f"#).unwrap();
+        assert_eq!(r.call_id(), r#"a"b@example.com"#);
+        assert_eq!(r.to_tag(), "t");
+    }
+
+    #[test]
+    fn tags_and_params_sws_trimmed() {
+        let r =
+            SipReplaces::parse("a@example.com ; to-tag = t ; from-tag = f ; foo = bar").unwrap();
+        assert_eq!(r.to_tag(), "t");
+        assert_eq!(r.from_tag(), "f");
+        assert_eq!(r.param("foo"), Some(Some("bar")));
+    }
+
+    #[test]
     fn from_str_is_wire_framing() {
         let r: SipReplaces = "abc123@203.0.113.5;to-tag=t1;from-tag=f1"
             .parse()

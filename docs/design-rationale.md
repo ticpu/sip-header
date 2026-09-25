@@ -32,6 +32,10 @@ Callers re-deriving the header/body boundary as `split_once("\r\n\r\n")` silentl
 
 A Reason embedded in a URI header is percent-decoded and nothing else. sip-uri returns the same literal `+` whether the producer sent `+` or `%2B`, so a `+`-as-space convention cannot be applied after parsing without corrupting real plus signs. A caller that knows its producer form-encodes converts them itself.
 
+## Conference-info normalization drops foreign-namespace subtrees
+
+Namespace prefixes are stripped before deserialization, so an element is matched by local name alone. Below the root, an element bound to a declared namespace that is neither conference-info nor the root's own is dropped with its subtree; otherwise an extension element named like a base element would deserialize as one. Unbound and undeclared prefixes are still stripped, and the root is never dropped, so documents with a nonstandard namespace declaration keep parsing.
+
 ## Mutators validate against the grammar their parser does not enforce
 
 A parser's leniency is what makes real traffic survivable; a value handed to a mutator never crossed the wire, so it earns none of that. An unchecked Call-ID set on a dialog identifier re-serializes into a header naming a different dialog, and an unchecked display name can carry a line break into the next header. Public mutators therefore return `Result` and check the RFC production for the field they set, and the resulting asymmetry stands: a value `parse` accepted can be rejected when set back through a mutator. A builder whose signature cannot return `Result` is deprecated in favour of a `try_` form that does.

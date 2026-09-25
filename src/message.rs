@@ -753,6 +753,27 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
         assert_eq!(headers[0], ("Subject".into(), "".into()));
     }
 
+    #[test]
+    fn value_trailing_whitespace_trimmed() {
+        let msg = "SIP/2.0 200 OK\r\nSubject: hi   \r\nFrom: <sip:a@example.com>\t\r\n\r\n";
+        assert_eq!(extract_header(msg, "Subject"), vec!["hi"]);
+        let headers = extract_all_headers(msg);
+        assert_eq!(headers[0].1, "hi");
+        assert_eq!(headers[1].1, "<sip:a@example.com>");
+    }
+
+    #[test]
+    fn folded_value_trailing_whitespace_trimmed() {
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Subject: hello  \r\n",
+            " world  \r\n",
+            "\r\n",
+        );
+        assert_eq!(extract_header(msg, "Subject"), vec!["hello world"]);
+        assert_eq!(extract_all_headers(msg)[0].1, "hello world");
+    }
+
     // -- extract_body tests --
 
     #[test]

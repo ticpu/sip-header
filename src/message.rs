@@ -115,6 +115,19 @@ fn matches_header_name(wire_name: &str, target: &str) -> bool {
     }
 }
 
+/// Unfold a continuation line into `value`, replacing the folding LWS with
+/// one SP (RFC 3261 §7.3.1).
+fn append_folded(value: &mut String, line: &str) {
+    let line = line.trim();
+    if line.is_empty() {
+        return;
+    }
+    if !value.is_empty() {
+        value.push(' ');
+    }
+    value.push_str(line);
+}
+
 /// Extract all occurrences of a header from a raw SIP message.
 ///
 /// Scans all lines up to the blank line separating headers from the message
@@ -142,8 +155,7 @@ pub fn extract_header(message: &str, name: &str) -> Vec<String> {
         if line.starts_with(' ') || line.starts_with('\t') {
             if current_match {
                 if let Some(last) = values.last_mut() {
-                    last.push(' ');
-                    last.push_str(line.trim_start());
+                    append_folded(last, line);
                 }
             }
             continue;
@@ -160,7 +172,7 @@ pub fn extract_header(message: &str, name: &str) -> Vec<String> {
                 current_match = true;
                 values.push(
                     hdr_value
-                        .trim_start()
+                        .trim()
                         .to_string(),
                 );
             }
@@ -189,8 +201,7 @@ pub fn extract_all_headers(message: &str) -> Vec<(String, String)> {
 
         if line.starts_with(' ') || line.starts_with('\t') {
             if let Some((_, value)) = headers.last_mut() {
-                value.push(' ');
-                value.push_str(line.trim_start());
+                append_folded(value, line);
             }
             continue;
         }
@@ -204,7 +215,7 @@ pub fn extract_all_headers(message: &str) -> Vec<(String, String)> {
                 headers.push((
                     hdr_name.to_string(),
                     hdr_value
-                        .trim_start()
+                        .trim()
                         .to_string(),
                 ));
             }

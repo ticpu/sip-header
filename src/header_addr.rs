@@ -652,7 +652,143 @@ mod tests {
         assert_eq!(addr.to_string(), "<sip:alice@example.com>");
     }
 
+    fn example_addr() -> SipHeaderAddr {
+        SipHeaderAddr::new(
+            "sip:alice@example.com"
+                .parse()
+                .unwrap(),
+        )
+    }
+
     #[test]
+    fn try_builder_display_name_and_params() {
+        let addr = example_addr()
+            .try_with_display_name("Alice")
+            .unwrap()
+            .try_with_param("Tag", Some("abc123"))
+            .unwrap()
+            .try_with_param("lr", None::<String>)
+            .unwrap();
+        assert_eq!(addr.display_name(), Some("Alice"));
+        assert_eq!(addr.tag(), Some("abc123"));
+        assert_eq!(
+            addr.to_string(),
+            "Alice <sip:alice@example.com>;tag=abc123;lr"
+        );
+    }
+
+    #[test]
+    fn try_with_display_name_accepts_qdtext_and_quoted_pair() {
+        for name in [
+            "José",
+            r#"Say "Hi""#,
+            "a\\b",
+            "a\tb",
+            "a\u{1}b",
+            "a\u{7f}b",
+            "",
+        ] {
+            let addr = example_addr()
+                .try_with_display_name(name)
+                .unwrap();
+            let reparsed: SipHeaderAddr = addr
+                .to_string()
+                .parse()
+                .unwrap();
+            let expected = if name.is_empty() { None } else { Some(name) };
+            assert_eq!(reparsed.display_name(), expected, "{name:?}");
+        }
+    }
+
+    #[test]
+    fn display_escapes_control_chars_as_quoted_pair() {
+        let addr = example_addr()
+            .try_with_display_name("a\u{1}b")
+            .unwrap();
+        assert_eq!(addr.to_string(), "\"a\\\u{1}b\" <sip:alice@example.com>");
+    }
+
+    #[test]
+    fn try_with_display_name_rejects_line_breaks() {
+        for name in ["a\r\nSubject: evil", "a\nSubject: evil", "a\rSubject: evil"] {
+            let e = example_addr()
+                .try_with_display_name(name)
+                .unwrap_err();
+            assert!(
+                !e.to_string()
+                    .contains("Subject"),
+                "{e}"
+            );
+        }
+    }
+
+    #[test]
+    fn try_with_param_accepts_token_host_and_quoted() {
+        for (key, value) in [
+            ("tag", Some("abc123")),
+            ("lr", None),
+            ("serviceurn", Some("urn%3Aservice%3Apolice")),
+            ("received", Some("[2001:db8::1]")),
+            ("maddr", Some("198.51.100.1:5060")),
+            ("foo", Some(r#""a;b, c""#)),
+            ("+sip.instance", Some(r#""<urn:uuid:TEST>""#)),
+            ("t", Some(r#""say \"hi\"""#)),
+            ("e", Some(r#""""#)),
+        ] {
+            let addr = example_addr()
+                .try_with_param(key, value)
+                .unwrap();
+            assert_eq!(addr.param_raw(key), Some(value), "{key}");
+            let reparsed: SipHeaderAddr = addr
+                .to_string()
+                .parse()
+                .unwrap();
+            assert_eq!(reparsed, addr, "{key}");
+        }
+    }
+
+    #[test]
+    fn try_with_param_rejects_bad_key() {
+        for key in ["", "a b", "a;b", "a=b", "a\r\nSubject: evil", "a\"b"] {
+            let e = example_addr()
+                .try_with_param(key, Some("x"))
+                .unwrap_err();
+            assert!(
+                !e.to_string()
+                    .contains("Subject"),
+                "{e}"
+            );
+        }
+    }
+
+    #[test]
+    fn try_with_param_rejects_bad_value() {
+        for value in [
+            "",
+            "a;b",
+            "a b",
+            "a,b",
+            "a>b",
+            "\"unterminated",
+            "\"a\"b\"",
+            "\"a\\\"",
+            "\"a\r\nb\"",
+            "x\r\nSubject: evil",
+            "\"a\\\nb\"",
+        ] {
+            let e = example_addr()
+                .try_with_param("k", Some(value))
+                .unwrap_err();
+            assert!(
+                !e.to_string()
+                    .contains("Subject"),
+                "{e}"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(deprecated)]
     fn builder_with_display_name_and_params() {
         let uri: sip_uri::Uri = "sip:alice@example.com"
             .parse()
@@ -666,6 +802,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn builder_flag_param() {
         let uri: sip_uri::Uri = "sip:proxy@example.com"
             .parse()

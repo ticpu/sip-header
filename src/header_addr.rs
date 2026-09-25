@@ -885,6 +885,26 @@ mod tests {
     }
 
     #[test]
+    fn display_quotes_non_token_display_name() {
+        for name in ["José", "A/B", "a=b", "x(y)", "a?b"] {
+            let input = format!(r#""{name}" <sip:a@example.com>"#);
+            let addr: SipHeaderAddr = input
+                .parse()
+                .unwrap();
+            assert_eq!(addr.to_string(), input);
+        }
+    }
+
+    #[test]
+    fn display_keeps_token_display_name_bare() {
+        let input = "A-b.c!%*_+`'~ <sip:a@example.com>";
+        let addr: SipHeaderAddr = input
+            .parse()
+            .unwrap();
+        assert_eq!(addr.to_string(), input);
+    }
+
+    #[test]
     fn params_sws_around_semi_and_equal() {
         let addr: SipHeaderAddr = "<sip:a@example.com> ; tag = x"
             .parse()

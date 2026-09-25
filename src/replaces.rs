@@ -65,11 +65,11 @@ pub(crate) fn parse_dialog_id(
         return Err(DialogIdError::Empty);
     }
 
-    let mut segments = trimmed.split(';');
-    let call_id = segments
-        .next()
-        .unwrap_or("")
-        .trim();
+    // A call-id `word` may contain `"`, so it ends at the first raw `;`.
+    let (call_id, rest) = trimmed
+        .split_once(';')
+        .unwrap_or((trimmed, ""));
+    let call_id = call_id.trim();
     if call_id.is_empty() {
         return Err(DialogIdError::Invalid("missing call-id".to_string()));
     }
@@ -79,16 +79,11 @@ pub(crate) fn parse_dialog_id(
     let mut early_only = false;
     let mut params = Vec::new();
 
-    for segment in segments {
-        let segment = segment.trim();
-        if segment.is_empty() {
-            continue;
-        }
-        if let Some((key, value)) = segment.split_once('=') {
-            let key = key
-                .trim()
-                .to_ascii_lowercase();
-            let value = value.trim();
+    for param in crate::parse_params(rest) {
+        let key = param
+            .key
+            .to_ascii_lowercase();
+        if let Some(value) = param.value {
             let slot = if key == first_tag_name {
                 Some(&mut first_tag)
             } else if key == second_tag_name {
@@ -111,7 +106,6 @@ pub(crate) fn parse_dialog_id(
                 None => params.push((key, Some(value.to_string()))),
             }
         } else {
-            let key = segment.to_ascii_lowercase();
             if with_early_only && key == "early-only" {
                 early_only = true;
             } else {
@@ -258,7 +252,7 @@ impl SipReplaces {
             .map(|(_, v)| v.as_deref())
     }
 
-    fn wire_form(&self) -> String {
+    fn wire_form(&self) -> Result<String, fmt::Error> {
         let mut s = format!(
             "{};to-tag={};from-tag={}",
             self.call_id, self.to_tag, self.from_tag
@@ -266,25 +260,21 @@ impl SipReplaces {
         if self.early_only {
             s.push_str(";early-only");
         }
-        write_params(&mut s, &self.params);
-        s
+        write_params(&mut s, &self.params)?;
+        Ok(s)
     }
 }
 
-pub(crate) fn write_params(s: &mut String, params: &[(String, Option<String>)]) {
+pub(crate) fn write_params(s: &mut String, params: &[(String, Option<String>)]) -> fmt::Result {
     for (key, value) in params {
-        s.push(';');
-        s.push_str(key);
-        if let Some(value) = value {
-            s.push('=');
-            s.push_str(value);
-        }
+        crate::write_param(s, key, value.as_deref(), false)?;
     }
+    Ok(())
 }
 
 impl fmt::Display for SipReplaces {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let wire = self.wire_form();
+        let wire = self.wire_form()?;
         if self.uri_header_framing {
             f.write_str(&sip_uri::encode_uri_header(&wire))
         } else {

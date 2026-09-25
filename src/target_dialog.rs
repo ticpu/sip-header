@@ -140,19 +140,19 @@ impl SipTargetDialog {
             .map(|(_, v)| v.as_deref())
     }
 
-    fn wire_form(&self) -> String {
+    fn wire_form(&self) -> Result<String, fmt::Error> {
         let mut s = format!(
             "{};local-tag={};remote-tag={}",
             self.call_id, self.local_tag, self.remote_tag
         );
-        write_params(&mut s, &self.params);
-        s
+        write_params(&mut s, &self.params)?;
+        Ok(s)
     }
 }
 
 impl fmt::Display for SipTargetDialog {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let wire = self.wire_form();
+        let wire = self.wire_form()?;
         if self.uri_header_framing {
             f.write_str(&sip_uri::encode_uri_header(&wire))
         } else {

@@ -143,6 +143,41 @@ pub(crate) fn write_quoted_pair(f: &mut std::fmt::Formatter<'_>, value: &str) ->
     f.write_str("\"")
 }
 
+/// One `generic-param` (RFC 3261 §25.1) as it appeared on the wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RawParam<'a> {
+    /// Name, SWS-trimmed, case preserved.
+    pub(crate) key: &'a str,
+    /// Value, SWS-trimmed, quotes and escapes intact; `None` for a flag.
+    pub(crate) value: Option<&'a str>,
+}
+
+impl RawParam<'_> {
+    /// The value without its surrounding quotes and with `quoted-pair`
+    /// unescaped, plus whether it was quoted.
+    pub(crate) fn unquoted(&self) -> Option<(String, bool)> {
+        let _ = self;
+        None
+    }
+}
+
+/// Read `*(SEMI generic-param)`, with or without the leading `;`.
+pub(crate) fn parse_params(s: &str) -> Vec<RawParam<'_>> {
+    let _ = s;
+    Vec::new()
+}
+
+/// Write `;key`, `;key=value`, or `;key="value"` when `quote` is set.
+pub(crate) fn write_param<W: std::fmt::Write + ?Sized>(
+    w: &mut W,
+    key: &str,
+    value: Option<&str>,
+    quote: bool,
+) -> std::fmt::Result {
+    let _ = (w, key, value, quote);
+    Ok(())
+}
+
 /// Split comma-separated header entries respecting angle-bracket nesting
 /// and double-quoted strings.
 ///
@@ -232,6 +267,77 @@ mod tests {
         let parts = split_comma_entries(input);
         assert_eq!(parts.len(), 3);
         assert_eq!(parts[1], r#" <sip:b@example.com>;note="x,y""#);
+    }
+
+    fn params(s: &str) -> Vec<(&str, Option<&str>)> {
+        parse_params(s)
+            .into_iter()
+            .map(|p| (p.key, p.value))
+            .collect()
+    }
+
+    #[test]
+    fn params_quoted_value_keeps_semicolon() {
+        assert_eq!(
+            params(r#";foo="a;b";tag=x"#),
+            vec![("foo", Some(r#""a;b""#)), ("tag", Some("x"))]
+        );
+    }
+
+    #[test]
+    fn params_trim_sws_around_semi_and_equal() {
+        assert_eq!(
+            params(" ; tag = x ; lr "),
+            vec![("tag", Some("x")), ("lr", None)]
+        );
+    }
+
+    #[test]
+    fn params_without_leading_semicolon_and_empty_segments() {
+        assert_eq!(params("tag=x;;lr;"), vec![("tag", Some("x")), ("lr", None)]);
+    }
+
+    #[test]
+    fn params_unterminated_quote_splits_at_next_semicolon() {
+        assert_eq!(
+            params(r#";x="a;to-tag=1;from-tag=2"#),
+            vec![
+                ("x", Some(r#""a"#)),
+                ("to-tag", Some("1")),
+                ("from-tag", Some("2"))
+            ]
+        );
+    }
+
+    #[test]
+    fn params_escaped_quote_inside_value() {
+        let p = parse_params(r#";t="say \"hi;\"";x=1"#);
+        assert_eq!(p.len(), 2);
+        assert_eq!(p[0].value, Some(r#""say \"hi;\"""#));
+        assert_eq!(p[0].unquoted(), Some((r#"say "hi;""#.to_string(), true)));
+        assert_eq!(p[1].value, Some("1"));
+    }
+
+    #[test]
+    fn params_empty_quoted_value() {
+        let p = parse_params(r#";a="""#);
+        assert_eq!(p[0].unquoted(), Some((String::new(), true)));
+    }
+
+    #[test]
+    fn params_unquoted_token_value() {
+        let p = parse_params(";a=b");
+        assert_eq!(p[0].unquoted(), Some(("b".to_string(), false)));
+        assert_eq!(parse_params(";lr")[0].unquoted(), None);
+    }
+
+    #[test]
+    fn write_param_forms() {
+        let mut s = String::new();
+        write_param(&mut s, "lr", None, false).unwrap();
+        write_param(&mut s, "tag", Some("x"), false).unwrap();
+        write_param(&mut s, "d-ver", Some(r#"a"b"#), true).unwrap();
+        assert_eq!(s, r#";lr;tag=x;d-ver="a\"b""#);
     }
 
     #[test]

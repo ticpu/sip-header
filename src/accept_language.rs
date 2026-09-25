@@ -214,11 +214,38 @@ mod tests {
     }
 
     #[test]
-    fn empty_input() {
-        assert!(matches!(
-            SipAcceptLanguage::parse(""),
-            Err(SipAcceptLanguageError::Empty)
-        ));
+    fn empty_input_is_empty_list() {
+        assert!(SipAcceptLanguage::parse("")
+            .unwrap()
+            .is_empty());
+        assert!(SipAcceptLanguage::parse("  ")
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn flag_param_roundtrip() {
+        let raw = "en;foo";
+        let al = SipAcceptLanguage::parse(raw).unwrap();
+        assert_eq!(al.entries()[0].param("foo"), Some(""));
+        assert_eq!(al.to_string(), raw);
+    }
+
+    #[test]
+    fn quoted_param_keeps_semicolon() {
+        let raw = r#"en;x="a;b";q=0.5"#;
+        let al = SipAcceptLanguage::parse(raw).unwrap();
+        assert_eq!(al.entries()[0].param("x"), Some(r#""a;b""#));
+        assert_eq!(al.entries()[0].q(), Some("0.5"));
+        assert_eq!(al.to_string(), raw);
+    }
+
+    #[test]
+    fn error_display_omits_input() {
+        let err = SipAcceptLanguage::parse(";secretvalue").unwrap_err();
+        assert!(!err
+            .to_string()
+            .contains("secretvalue"));
     }
 
     #[test]
@@ -252,10 +279,12 @@ mod tests {
     }
 
     #[test]
-    fn from_entries_empty_is_empty_error() {
-        assert!(matches!(
-            SipAcceptLanguage::from_entries(std::iter::empty::<&str>()),
-            Err(SipAcceptLanguageError::Empty)
-        ));
+    fn from_entries_empty_is_empty_list() {
+        assert!(SipAcceptLanguage::from_entries(std::iter::empty::<&str>())
+            .unwrap()
+            .is_empty());
+        assert!(SipAcceptLanguage::from_entries(["", "  "])
+            .unwrap()
+            .is_empty());
     }
 }

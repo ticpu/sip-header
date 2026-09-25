@@ -213,11 +213,38 @@ mod tests {
     }
 
     #[test]
-    fn empty_input() {
-        assert!(matches!(
-            SipAcceptEncoding::parse(""),
-            Err(SipAcceptEncodingError::Empty)
-        ));
+    fn empty_input_is_empty_list() {
+        assert!(SipAcceptEncoding::parse("")
+            .unwrap()
+            .is_empty());
+        assert!(SipAcceptEncoding::parse("  ")
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn flag_param_roundtrip() {
+        let raw = "gzip;foo";
+        let ae = SipAcceptEncoding::parse(raw).unwrap();
+        assert_eq!(ae.entries()[0].param("foo"), Some(""));
+        assert_eq!(ae.to_string(), raw);
+    }
+
+    #[test]
+    fn quoted_param_keeps_semicolon() {
+        let raw = r#"gzip;x="a;b";q=0.5"#;
+        let ae = SipAcceptEncoding::parse(raw).unwrap();
+        assert_eq!(ae.entries()[0].param("x"), Some(r#""a;b""#));
+        assert_eq!(ae.entries()[0].q(), Some("0.5"));
+        assert_eq!(ae.to_string(), raw);
+    }
+
+    #[test]
+    fn error_display_omits_input() {
+        let err = SipAcceptEncoding::parse(";secretvalue").unwrap_err();
+        assert!(!err
+            .to_string()
+            .contains("secretvalue"));
     }
 
     #[test]
@@ -251,10 +278,12 @@ mod tests {
     }
 
     #[test]
-    fn from_entries_empty_is_empty_error() {
-        assert!(matches!(
-            SipAcceptEncoding::from_entries(std::iter::empty::<&str>()),
-            Err(SipAcceptEncodingError::Empty)
-        ));
+    fn from_entries_empty_is_empty_list() {
+        assert!(SipAcceptEncoding::from_entries(std::iter::empty::<&str>())
+            .unwrap()
+            .is_empty());
+        assert!(SipAcceptEncoding::from_entries(["", "  "])
+            .unwrap()
+            .is_empty());
     }
 }

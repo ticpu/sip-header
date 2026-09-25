@@ -247,8 +247,38 @@ mod tests {
     }
 
     #[test]
-    fn empty_input() {
-        assert!(matches!(SipAccept::parse(""), Err(SipAcceptError::Empty)));
+    fn empty_input_is_empty_list() {
+        assert!(SipAccept::parse("")
+            .unwrap()
+            .is_empty());
+        assert!(SipAccept::parse("  ")
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn flag_param_roundtrip() {
+        let raw = "application/sdp;foo";
+        let accept = SipAccept::parse(raw).unwrap();
+        assert_eq!(accept.entries()[0].param("foo"), Some(""));
+        assert_eq!(accept.to_string(), raw);
+    }
+
+    #[test]
+    fn quoted_param_keeps_semicolon() {
+        let raw = r#"application/sdp;x="a;b";q=0.5"#;
+        let accept = SipAccept::parse(raw).unwrap();
+        assert_eq!(accept.entries()[0].param("x"), Some(r#""a;b""#));
+        assert_eq!(accept.entries()[0].q(), Some("0.5"));
+        assert_eq!(accept.to_string(), raw);
+    }
+
+    #[test]
+    fn error_display_omits_input() {
+        let err = SipAccept::parse("secretvalue").unwrap_err();
+        assert!(!err
+            .to_string()
+            .contains("secretvalue"));
     }
 
     #[test]
@@ -292,10 +322,12 @@ mod tests {
     }
 
     #[test]
-    fn from_entries_empty_is_empty_error() {
-        assert!(matches!(
-            SipAccept::from_entries(std::iter::empty::<&str>()),
-            Err(SipAcceptError::Empty)
-        ));
+    fn from_entries_empty_is_empty_list() {
+        assert!(SipAccept::from_entries(std::iter::empty::<&str>())
+            .unwrap()
+            .is_empty());
+        assert!(SipAccept::from_entries(["", "  "])
+            .unwrap()
+            .is_empty());
     }
 }

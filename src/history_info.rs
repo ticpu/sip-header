@@ -62,59 +62,44 @@ impl HistoryInfoReason {
         &self.protocol
     }
 
-    /// The cause code, if present (e.g. `200`, `302`).
+    /// The cause code (e.g. `200`, `302`); `None` when absent or when the
+    /// value is not a `u16`.
     pub fn cause(&self) -> Option<u16> {
         self.cause
     }
 
-    /// The human-readable reason text, if present.
+    /// The reason text, if present, without its quotes and with
+    /// `quoted-pair` unescaped.
     pub fn text(&self) -> Option<&str> {
         self.text
             .as_deref()
     }
 }
 
-/// Parse a percent-decoded RFC 3326 Reason value.
-///
-/// Input format: `protocol;cause=N;text="description"`
+/// Parse a percent-decoded RFC 3326 `protocol *(SEMI reason-params)`.
 fn parse_reason(decoded: &str) -> HistoryInfoReason {
     let (protocol, rest) = decoded
         .split_once(';')
         .unwrap_or((decoded, ""));
 
-    let mut cause = None;
-    let mut text = None;
-
-    // Extract cause (always a simple integer, safe to find by prefix)
-    if let Some(idx) = rest.find("cause=") {
-        let val_start = idx + 6;
-        let val_end = rest[val_start..]
-            .find(';')
-            .map(|i| val_start + i)
-            .unwrap_or(rest.len());
-        cause = rest[val_start..val_end]
-            .trim()
-            .parse::<u16>()
-            .ok();
-    }
-
-    // Extract text (may be quoted, always appears after cause in practice)
-    if let Some(idx) = rest.find("text=") {
-        let val_start = idx + 5;
-        let val = rest[val_start..].trim_start();
-        if let Some(inner) = val.strip_prefix('"') {
-            if let Some(end) = inner.find('"') {
-                text = Some(inner[..end].to_string());
-            } else {
-                text = Some(inner.to_string());
-            }
-        } else {
-            let end = val
-                .find(';')
-                .unwrap_or(val.len());
-            text = Some(val[..end].to_string());
-        }
-    }
+    let params = crate::parse_params(rest);
+    let find = |name: &str| {
+        params
+            .iter()
+            .find(|p| {
+                p.key
+                    .eq_ignore_ascii_case(name)
+            })
+    };
+    let cause = find("cause")
+        .and_then(|p| p.value)
+        .and_then(|v| {
+            v.parse::<u16>()
+                .ok()
+        });
+    let text = find("text")
+        .and_then(|p| p.unquoted())
+        .map(|(text, _)| text);
 
     HistoryInfoReason {
         protocol: protocol
@@ -170,20 +155,16 @@ impl HistoryInfoEntry {
 
     /// Parse the Reason header embedded in the URI.
     ///
-    /// The Reason value is percent-decoded (with `+` treated as space,
-    /// matching common SIP URI encoding conventions) and parsed into
-    /// protocol, cause code, and text components per RFC 3326.
+    /// The Reason value is percent-decoded as an RFC 3261 `hvalue` and
+    /// parsed into protocol, cause code, and text components per RFC 3326.
+    /// `+` is a literal plus sign, not a space.
     ///
     /// Returns `None` if no Reason is present, `Err` if percent-decoding
     /// produces invalid UTF-8.
     pub fn reason(&self) -> Option<Result<HistoryInfoReason, Utf8Error>> {
         let raw = self.reason_raw()?;
-        // SIP stacks commonly use + for space in URI header values
-        // (form-encoding convention). Replace before percent-decoding
-        // so %2B (literal +) is preserved correctly.
-        let raw = raw.replace('+', " ");
         Some(
-            percent_decode_str(&raw)
+            percent_decode_str(raw)
                 .decode_utf8()
                 .map(|decoded| parse_reason(&decoded)),
         )

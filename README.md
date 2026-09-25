@@ -88,7 +88,7 @@ for unregistered headers.
 
 ### Compact header forms (RFC 3261 §7.3.3)
 
-All 20 IANA-registered compact forms are supported:
+All IANA-registered compact forms are supported:
 
 ```rust
 use sip_header::SipHeader;
@@ -125,6 +125,7 @@ assert_eq!(headers[1].0, "f");  // not "From"
 |---|---|
 | `header_addr` | RFC 3261 `name-addr` with header-level parameters |
 | `header` | `SipHeader` enum, `SipHeaderLookup` trait |
+| `call_id` | RFC 3261 Call-ID value |
 | `message` | Extract headers and body from raw SIP message text |
 | `via` | RFC 3261 Via header parser |
 | `warning` | RFC 3261 Warning header parser |
@@ -145,7 +146,8 @@ assert_eq!(headers[1].0, "f");  // not "From"
 
 | Feature | Dependencies | Description |
 |---|---|---|
-| `serde` | serde | Serde derives on all types |
+| `message` | — | Raw SIP message extraction (`extract_header`, `extract_body`, …); on by default |
+| `serde` | serde | Serde derives on the header-name catalog enums |
 | `draft` | — | Widely-deployed headers from expired IETF drafts (Diversion, Remote-Party-ID) |
 | `conference-info` | quick-xml, serde | RFC 4575 XML parsing |
 

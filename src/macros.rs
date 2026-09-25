@@ -190,7 +190,7 @@ mod tests {
         }
     }
 
-    /// Hand-written error for the old-form invocation.
+    /// Caller-defined error for the bare `error_type:` form.
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub(crate) struct ParseOldEnumError(pub String);
 
@@ -204,7 +204,7 @@ mod tests {
 
     define_header_enum! {
         error_type: ParseOldEnumError,
-        /// Old-form invocation stays source-compatible.
+        /// Bare `error_type:` form, error defined by the caller.
         pub(crate) enum OldEnum {
             /// `Old-Wire`.
             One => "Old-Wire",

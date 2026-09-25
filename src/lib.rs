@@ -9,6 +9,7 @@
 //!
 //! - [`header_addr`] — RFC 3261 `name-addr` with header-level parameters
 //! - [`header`] — SIP header name catalog and [`SipHeaderLookup`] trait
+//! - [`call_id`] — RFC 3261 Call-ID value
 //! - [`message`] — Extract headers, Request-URI and body from raw SIP message text (feature: `message`)
 //! - [`via`] — RFC 3261 Via header parser
 //! - [`warning`] — RFC 3261 Warning header parser

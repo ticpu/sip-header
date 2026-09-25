@@ -157,8 +157,6 @@ mod tests {
         assert_eq!(id.host(), None);
     }
 
-    /// `word` admits characters no host may carry, and a value using them is
-    /// still a Call-ID — rejecting it would refuse traffic the grammar allows.
     #[test]
     fn a_second_word_that_is_not_a_host_is_accepted() {
         for raw in [

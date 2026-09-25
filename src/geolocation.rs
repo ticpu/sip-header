@@ -209,6 +209,46 @@ mod tests {
     }
 
     #[test]
+    fn geoloc_params_dropped() {
+        let geo = SipGeolocation::parse("<cid:x@example.com>;inserted-by=y");
+        assert_eq!(
+            geo.refs(),
+            &[SipGeolocationRef::Cid("x@example.com".into())]
+        );
+    }
+
+    #[test]
+    fn comma_inside_brackets_not_split() {
+        let geo = SipGeolocation::parse("<https://example.com/a,b>");
+        assert_eq!(
+            geo.refs(),
+            &[SipGeolocationRef::Url("https://example.com/a,b".into())]
+        );
+    }
+
+    #[test]
+    fn cid_scheme_case_insensitive() {
+        let geo = SipGeolocation::parse("<CID:x@example.com>");
+        assert_eq!(geo.cid(), Some("x@example.com"));
+    }
+
+    #[test]
+    fn unbracketed_entry_skipped() {
+        let geo = SipGeolocation::parse("cid:x@example.com, <https://example.com/loc>");
+        assert_eq!(geo.len(), 1);
+        assert_eq!(geo.url(), Some("https://example.com/loc"));
+    }
+
+    #[test]
+    fn from_entries_matches_parse() {
+        let split =
+            SipGeolocation::from_entries(["<cid:a>;inserted-by=x", "<https://example.com/a,b>"]);
+        let joined = SipGeolocation::parse("<cid:a>;inserted-by=x, <https://example.com/a,b>");
+        assert_eq!(split, joined);
+        assert_eq!(split.len(), 2);
+    }
+
+    #[test]
     fn multiple_cids() {
         let raw = "<cid:first>, <cid:second>, <https://example.com/loc>";
         let geo = SipGeolocation::parse(raw);

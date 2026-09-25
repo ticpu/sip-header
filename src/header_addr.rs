@@ -374,12 +374,6 @@ fn needs_quoting(name: &str) -> bool {
         .all(is_token_char)
 }
 
-/// Outside `qdtext`, so only representable as `quoted-pair`; CR and LF stay
-/// raw since they can only arrive as LWS folding.
-fn is_quoted_pair_only(c: char) -> bool {
-    c.is_ascii_control() && !matches!(c, '\t' | '\r' | '\n')
-}
-
 /// RFC 3261 §25.1 `quoted-string` with its quotes, excluding CR and LF.
 fn is_quoted_string(v: &str) -> bool {
     let Some(inner) = v.strip_prefix('"') else {
@@ -398,7 +392,7 @@ fn is_quoted_string(v: &str) -> bool {
                 _ => return false,
             },
             '\r' | '\n' => return false,
-            c if is_quoted_pair_only(c) => return false,
+            c if crate::is_quoted_pair_only(c) => return false,
             _ => {}
         }
     }
@@ -506,14 +500,8 @@ impl fmt::Display for SipHeaderAddr {
         {
             Some(name) if !name.is_empty() => {
                 if needs_quoting(name) {
-                    f.write_char('"')?;
-                    for c in crate::escape_quoted_pair(name).chars() {
-                        if is_quoted_pair_only(c) {
-                            f.write_char('\\')?;
-                        }
-                        f.write_char(c)?;
-                    }
-                    f.write_str("\" ")?;
+                    crate::write_quoted_pair(f, name)?;
+                    f.write_char(' ')?;
                 } else {
                     write!(f, "{name} ")?;
                 }

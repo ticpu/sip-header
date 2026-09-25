@@ -120,13 +120,8 @@ impl SipWarningEntry {
 
 impl fmt::Display for SipWarningEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:03} {} \"{}\"",
-            self.code,
-            self.agent,
-            crate::escape_quoted_pair(&self.text)
-        )
+        write!(f, "{:03} {} ", self.code, self.agent)?;
+        crate::write_quoted_pair(f, &self.text)
     }
 }
 

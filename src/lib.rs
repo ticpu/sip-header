@@ -112,32 +112,21 @@ pub(crate) fn unescape_quoted_pair(s: &str) -> String {
     result
 }
 
-/// Escape a string for use inside a `quoted-string` (RFC 3261 §25.1).
-///
-/// Escapes `"` → `\"` and `\` → `\\`. Does **not** add surrounding quotes.
-pub(crate) fn escape_quoted_pair(s: &str) -> String {
-    if !s.contains(['"', '\\']) {
-        return s.to_string();
-    }
-    let mut result = String::with_capacity(s.len() + 4);
-    for ch in s.chars() {
-        if ch == '"' || ch == '\\' {
-            result.push('\\');
-        }
-        result.push(ch);
-    }
-    result
+/// A control character `qdtext` excludes but `quoted-pair` carries
+/// (RFC 3261 §25.1); CR and LF fit neither.
+pub(crate) fn is_quoted_pair_only(c: char) -> bool {
+    c.is_ascii_control() && !matches!(c, '\t' | '\r' | '\n')
 }
 
-/// Write a `quoted-string`: surrounds with `"` and escapes embedded
-/// quotes/backslashes per RFC 3261 §25.1.
+/// Write a `quoted-string`: surrounds with `"` and emits `"`, `\` and
+/// [`is_quoted_pair_only`] characters as `quoted-pair` (RFC 3261 §25.1).
 pub(crate) fn write_quoted_pair<W: std::fmt::Write + ?Sized>(
     f: &mut W,
     value: &str,
 ) -> std::fmt::Result {
     f.write_char('"')?;
     for ch in value.chars() {
-        if ch == '"' || ch == '\\' {
+        if ch == '"' || ch == '\\' || is_quoted_pair_only(ch) {
             f.write_char('\\')?;
         }
         f.write_char(ch)?;

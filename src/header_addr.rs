@@ -1,7 +1,7 @@
 //! RFC 3261 `name-addr` parser with header-level parameter support.
 
 use std::borrow::Cow;
-use std::fmt;
+use std::fmt::{self, Write as _};
 use std::str::{FromStr, Utf8Error};
 
 use percent_encoding::percent_decode_str;
@@ -87,13 +87,47 @@ impl SipHeaderAddr {
         }
     }
 
-    /// Set the display name.
+    /// Set the display name, unchecked; prefer
+    /// [`try_with_display_name`](Self::try_with_display_name), which rejects CR/LF.
     pub fn with_display_name(mut self, name: impl Into<String>) -> Self {
         self.display_name = Some(name.into());
         self
     }
 
-    /// Add a header-level parameter. The key is lowercased on insertion.
+    /// Set the display name, rejecting what an RFC 3261 §25.1
+    /// `quoted-string` cannot carry.
+    ///
+    /// Any text is accepted except CR and LF: characters outside `qdtext`
+    /// are emitted as `quoted-pair`. [`Display`](fmt::Display) quotes the
+    /// name unless it is a single `token`.
+    ///
+    /// ```
+    /// use sip_header::SipHeaderAddr;
+    ///
+    /// let addr = SipHeaderAddr::new("sip:alice@example.com".parse()?)
+    ///     .try_with_display_name("Alice Smith")?;
+    /// assert_eq!(addr.to_string(), r#""Alice Smith" <sip:alice@example.com>"#);
+    /// assert!(SipHeaderAddr::new("sip:alice@example.com".parse()?)
+    ///     .try_with_display_name("a\r\nb")
+    ///     .is_err());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn try_with_display_name(
+        mut self,
+        name: impl Into<String>,
+    ) -> Result<Self, ParseSipHeaderAddrError> {
+        let name = name.into();
+        if name.contains(['\r', '\n']) {
+            return Err(ParseSipHeaderAddrError(
+                "display name contains CR or LF".to_string(),
+            ));
+        }
+        self.display_name = Some(name);
+        Ok(self)
+    }
+
+    /// Add a header-level parameter, unchecked, lowercasing the key; prefer
+    /// [`try_with_param`](Self::try_with_param), which validates both.
     pub fn with_param(mut self, key: impl Into<String>, value: Option<impl Into<String>>) -> Self {
         self.params
             .push((
@@ -102,6 +136,49 @@ impl SipHeaderAddr {
                 value.map(Into::into),
             ));
         self
+    }
+
+    /// Add a header-level `generic-param` (RFC 3261 §25.1), lowercasing the key.
+    ///
+    /// The key must be a `token`. A value, when given, must be a `token`, a
+    /// host (`token` characters plus `:`, `[` and `]`), or a complete
+    /// `quoted-string` including its quotes. It is stored and emitted as
+    /// given, like a parsed value, so percent-encoding is the caller's.
+    ///
+    /// ```
+    /// use sip_header::SipHeaderAddr;
+    ///
+    /// let addr = SipHeaderAddr::new("sip:alice@example.com".parse()?)
+    ///     .try_with_param("tag", Some("abc123"))?
+    ///     .try_with_param("lr", None::<&str>)?;
+    /// assert_eq!(addr.to_string(), "<sip:alice@example.com>;tag=abc123;lr");
+    /// assert!(SipHeaderAddr::new("sip:alice@example.com".parse()?)
+    ///     .try_with_param("tag", Some("a;b"))
+    ///     .is_err());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn try_with_param(
+        mut self,
+        key: impl Into<String>,
+        value: Option<impl Into<String>>,
+    ) -> Result<Self, ParseSipHeaderAddrError> {
+        let key = key.into();
+        if key.is_empty()
+            || !key
+                .chars()
+                .all(is_token_char)
+        {
+            return Err(ParseSipHeaderAddrError(
+                "parameter name is not a token".to_string(),
+            ));
+        }
+        let value = value.map(Into::into);
+        if let Some(v) = &value {
+            validate_param_value(v)?;
+        }
+        self.params
+            .push((key.to_ascii_lowercase(), value));
+        Ok(self)
     }
 
     /// The display name, if present.
@@ -297,6 +374,56 @@ fn needs_quoting(name: &str) -> bool {
         .all(is_token_char)
 }
 
+/// Outside `qdtext`, so only representable as `quoted-pair`; CR and LF stay
+/// raw since they can only arrive as LWS folding.
+fn is_quoted_pair_only(c: char) -> bool {
+    c.is_ascii_control() && !matches!(c, '\t' | '\r' | '\n')
+}
+
+/// RFC 3261 §25.1 `quoted-string` with its quotes, excluding CR and LF.
+fn is_quoted_string(v: &str) -> bool {
+    let Some(inner) = v.strip_prefix('"') else {
+        return false;
+    };
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                return chars
+                    .as_str()
+                    .is_empty()
+            }
+            '\\' => match chars.next() {
+                Some(e) if e.is_ascii() && !matches!(e, '\r' | '\n') => {}
+                _ => return false,
+            },
+            '\r' | '\n' => return false,
+            c if is_quoted_pair_only(c) => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
+fn validate_param_value(v: &str) -> Result<(), ParseSipHeaderAddrError> {
+    if v.is_empty() {
+        return Err(ParseSipHeaderAddrError(
+            "parameter value is empty".to_string(),
+        ));
+    }
+    let host_like = v
+        .chars()
+        .all(|c| is_token_char(c) || matches!(c, ':' | '[' | ']'));
+    if host_like || is_quoted_string(v) {
+        Ok(())
+    } else {
+        Err(ParseSipHeaderAddrError(format!(
+            "parameter value ({} bytes) is not a token, host or quoted-string",
+            v.len()
+        )))
+    }
+}
+
 impl FromStr for SipHeaderAddr {
     type Err = ParseSipHeaderAddrError;
 
@@ -379,7 +506,14 @@ impl fmt::Display for SipHeaderAddr {
         {
             Some(name) if !name.is_empty() => {
                 if needs_quoting(name) {
-                    write!(f, "\"{}\" ", crate::escape_quoted_pair(name))?;
+                    f.write_char('"')?;
+                    for c in crate::escape_quoted_pair(name).chars() {
+                        if is_quoted_pair_only(c) {
+                            f.write_char('\\')?;
+                        }
+                        f.write_char(c)?;
+                    }
+                    f.write_str("\" ")?;
                 } else {
                     write!(f, "{name} ")?;
                 }
@@ -788,7 +922,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn builder_with_display_name_and_params() {
         let uri: sip_uri::Uri = "sip:alice@example.com"
             .parse()
@@ -802,7 +935,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn builder_flag_param() {
         let uri: sip_uri::Uri = "sip:proxy@example.com"
             .parse()

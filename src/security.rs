@@ -293,3 +293,42 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod param_tests {
+    use super::*;
+
+    #[test]
+    fn d_ver_stays_quoted_on_display() {
+        let input = r#"ipsec-3gpp;d-ver="0000000000000000000000000000abcd";q=0.1"#;
+        let sec = SipSecurity::parse(input).unwrap();
+        assert_eq!(
+            sec.entries()[0].param("d-ver"),
+            Some(Some("0000000000000000000000000000abcd"))
+        );
+        assert_eq!(sec.to_string(), input);
+    }
+
+    #[test]
+    fn quoted_value_keeps_semicolon() {
+        let sec = SipSecurity::parse(r#"digest;x="a;b";q=0.5"#).unwrap();
+        let mech = &sec.entries()[0];
+        assert_eq!(mech.param("x"), Some(Some("a;b")));
+        assert_eq!(mech.q(), Some("0.5"));
+    }
+
+    #[test]
+    fn quoted_pair_unescaped() {
+        let sec = SipSecurity::parse(r#"digest;x="a\"b""#).unwrap();
+        assert_eq!(sec.entries()[0].param("x"), Some(Some(r#"a"b"#)));
+        assert_eq!(sec.to_string(), r#"digest;x="a\"b""#);
+    }
+
+    #[test]
+    fn error_display_omits_input() {
+        let err = SipSecurity::parse(";secret-value").unwrap_err();
+        assert!(!err
+            .to_string()
+            .contains("secret-value"));
+    }
+}

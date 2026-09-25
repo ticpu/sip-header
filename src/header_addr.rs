@@ -889,6 +889,43 @@ mod tests {
     }
 
     #[test]
+    fn params_sws_around_semi_and_equal() {
+        let addr: SipHeaderAddr = "<sip:a@example.com> ; tag = x"
+            .parse()
+            .unwrap();
+        assert_eq!(addr.tag(), Some("x"));
+        assert_eq!(
+            addr.params()
+                .collect::<Vec<_>>(),
+            vec![("tag", Some("x"))]
+        );
+    }
+
+    #[test]
+    fn params_quoted_value_keeps_semicolon() {
+        let input = r#"<sip:a@example.com>;foo="a;b";tag=x"#;
+        let addr: SipHeaderAddr = input
+            .parse()
+            .unwrap();
+        assert_eq!(addr.param_raw("foo"), Some(Some(r#""a;b""#)));
+        assert_eq!(addr.tag(), Some("x"));
+        assert_eq!(addr.to_string(), input);
+    }
+
+    #[test]
+    fn params_quoted_instance_kept_raw() {
+        let input = r#"<sip:a@198.51.100.1>;+sip.instance="<urn:uuid:00000000-0000-0000-0000-000000000001>";expires=60"#;
+        let addr: SipHeaderAddr = input
+            .parse()
+            .unwrap();
+        assert_eq!(
+            addr.param_raw("+sip.instance"),
+            Some(Some(r#""<urn:uuid:00000000-0000-0000-0000-000000000001>""#))
+        );
+        assert_eq!(addr.to_string(), input);
+    }
+
+    #[test]
     fn params_iterator() {
         let addr: SipHeaderAddr = "<sip:user@host>;tag=abc;lr;expires=60"
             .parse()

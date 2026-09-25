@@ -49,10 +49,7 @@ impl SipAcceptEntry {
 impl fmt::Display for SipAcceptEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.media_range)?;
-        for (key, value) in &self.params {
-            write!(f, ";{key}={value}")?;
-        }
-        Ok(())
+        write_accept_params(f, &self.params)
     }
 }
 
@@ -60,7 +57,8 @@ impl fmt::Display for SipAcceptEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SipAcceptError {
-    /// The input string was empty or whitespace-only.
+    /// An empty value. Not returned by parsing, which reads an empty value as
+    /// the empty list RFC 3261 §25.1 allows.
     Empty,
     /// An entry could not be parsed.
     InvalidFormat(String),
@@ -70,7 +68,7 @@ impl fmt::Display for SipAcceptError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Empty => write!(f, "empty Accept header value"),
-            Self::InvalidFormat(raw) => write!(f, "invalid Accept entry: {raw}"),
+            Self::InvalidFormat(raw) => write!(f, "invalid Accept entry ({} bytes)", raw.len()),
         }
     }
 }
@@ -104,32 +102,54 @@ fn parse_accept_entry(raw: &str) -> Result<SipAcceptEntry, SipAcceptError> {
     media_range.push('/');
     media_range.push_str(&subtype_str.to_ascii_lowercase());
 
-    let mut params = Vec::new();
-    if let Some(params_str) = params_part {
-        for segment in params_str.split(';') {
-            let segment = segment.trim();
-            if segment.is_empty() {
-                continue;
-            }
-            if let Some((key, value)) = segment.split_once('=') {
-                params.push((
-                    key.trim()
-                        .to_ascii_lowercase(),
-                    value
-                        .trim()
-                        .to_string(),
-                ));
-            } else {
-                params.push((segment.to_ascii_lowercase(), String::new()));
-            }
-        }
-    }
-
     Ok(SipAcceptEntry {
         media_range,
         slash_pos,
-        params,
+        params: read_accept_params(params_part.unwrap_or("")),
     })
+}
+
+/// Read `*(SEMI accept-param)`: keys lowercased, values raw, `""` for a flag.
+pub(crate) fn read_accept_params(s: &str) -> Vec<(String, String)> {
+    crate::parse_params(s)
+        .into_iter()
+        .map(|p| {
+            (
+                p.key
+                    .to_ascii_lowercase(),
+                p.value
+                    .unwrap_or("")
+                    .to_string(),
+            )
+        })
+        .collect()
+}
+
+/// Write `*(SEMI accept-param)`, an empty value as a flag.
+pub(crate) fn write_accept_params(
+    f: &mut fmt::Formatter<'_>,
+    params: &[(String, String)],
+) -> fmt::Result {
+    for (key, value) in params {
+        crate::write_param(
+            f,
+            key,
+            Some(value.as_str()).filter(|v| !v.is_empty()),
+            false,
+        )?;
+    }
+    Ok(())
+}
+
+/// True when every entry is blank: the empty list `[ accept-range *(COMMA
+/// accept-range) ]` allows (RFC 3261 §25.1), shared by the Accept-* headers.
+pub(crate) fn all_blank(entries: &[&str]) -> bool {
+    entries
+        .iter()
+        .all(|e| {
+            e.trim()
+                .is_empty()
+        })
 }
 
 /// Parsed SIP Accept header value.
@@ -139,26 +159,30 @@ pub struct SipAccept(Vec<SipAcceptEntry>);
 
 impl SipAccept {
     /// Parse a comma-separated Accept header value.
+    ///
+    /// An empty or whitespace-only value is the empty list (RFC 3261 §25.1).
     pub fn parse(raw: &str) -> Result<Self, SipAcceptError> {
-        let raw = raw.trim();
-        if raw.is_empty() {
-            return Err(SipAcceptError::Empty);
-        }
         Self::from_entries(crate::split_comma_entries(raw))
     }
 
     /// Build from entries a transport already split; each is one `accept-range`.
+    ///
+    /// No entries, or only blank ones, is the empty list; a blank entry beside
+    /// a real one is an error.
     pub fn from_entries<'a>(
         entries: impl IntoIterator<Item = &'a str>,
     ) -> Result<Self, SipAcceptError> {
-        let entries: Vec<_> = entries
+        let entries: Vec<&str> = entries
+            .into_iter()
+            .collect();
+        if all_blank(&entries) {
+            return Ok(Self(Vec::new()));
+        }
+        entries
             .into_iter()
             .map(parse_accept_entry)
-            .collect::<Result<_, _>>()?;
-        if entries.is_empty() {
-            return Err(SipAcceptError::Empty);
-        }
-        Ok(Self(entries))
+            .collect::<Result<_, _>>()
+            .map(Self)
     }
 
     /// The parsed entries as a slice.

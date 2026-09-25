@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use crate::accept::{all_blank, read_accept_params, write_accept_params};
+
 /// A single Accept-Encoding entry: `encoding *(SEMI accept-param)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -38,10 +40,7 @@ impl SipAcceptEncodingEntry {
 impl fmt::Display for SipAcceptEncodingEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.encoding)?;
-        for (key, value) in &self.params {
-            write!(f, ";{key}={value}")?;
-        }
-        Ok(())
+        write_accept_params(f, &self.params)
     }
 }
 
@@ -49,7 +48,8 @@ impl fmt::Display for SipAcceptEncodingEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SipAcceptEncodingError {
-    /// The input string was empty or whitespace-only.
+    /// An empty value. Not returned by parsing, which reads an empty value as
+    /// the empty list RFC 3261 §25.1 allows.
     Empty,
     /// An entry could not be parsed.
     InvalidFormat(String),
@@ -59,7 +59,9 @@ impl fmt::Display for SipAcceptEncodingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Empty => write!(f, "empty Accept-Encoding header value"),
-            Self::InvalidFormat(raw) => write!(f, "invalid Accept-Encoding entry: {raw}"),
+            Self::InvalidFormat(raw) => {
+                write!(f, "invalid Accept-Encoding entry ({} bytes)", raw.len())
+            }
         }
     }
 }
@@ -81,30 +83,10 @@ fn parse_entry(raw: &str) -> Result<SipAcceptEncodingEntry, SipAcceptEncodingErr
         return Err(SipAcceptEncodingError::InvalidFormat(raw.to_string()));
     }
 
-    let encoding = encoding_part.to_ascii_lowercase();
-    let mut params = Vec::new();
-
-    if let Some(params_str) = params_part {
-        for segment in params_str.split(';') {
-            let segment = segment.trim();
-            if segment.is_empty() {
-                continue;
-            }
-            if let Some((key, value)) = segment.split_once('=') {
-                params.push((
-                    key.trim()
-                        .to_ascii_lowercase(),
-                    value
-                        .trim()
-                        .to_string(),
-                ));
-            } else {
-                params.push((segment.to_ascii_lowercase(), String::new()));
-            }
-        }
-    }
-
-    Ok(SipAcceptEncodingEntry { encoding, params })
+    Ok(SipAcceptEncodingEntry {
+        encoding: encoding_part.to_ascii_lowercase(),
+        params: read_accept_params(params_part.unwrap_or("")),
+    })
 }
 
 /// Parsed SIP Accept-Encoding header value.
@@ -114,26 +96,30 @@ pub struct SipAcceptEncoding(Vec<SipAcceptEncodingEntry>);
 
 impl SipAcceptEncoding {
     /// Parse a comma-separated Accept-Encoding header value.
+    ///
+    /// An empty or whitespace-only value is the empty list (RFC 3261 §25.1).
     pub fn parse(raw: &str) -> Result<Self, SipAcceptEncodingError> {
-        let raw = raw.trim();
-        if raw.is_empty() {
-            return Err(SipAcceptEncodingError::Empty);
-        }
         Self::from_entries(crate::split_comma_entries(raw))
     }
 
     /// Build from entries a transport already split; each is one `encoding`.
+    ///
+    /// No entries, or only blank ones, is the empty list; a blank entry beside
+    /// a real one is an error.
     pub fn from_entries<'a>(
         entries: impl IntoIterator<Item = &'a str>,
     ) -> Result<Self, SipAcceptEncodingError> {
-        let entries: Vec<_> = entries
+        let entries: Vec<&str> = entries
+            .into_iter()
+            .collect();
+        if all_blank(&entries) {
+            return Ok(Self(Vec::new()));
+        }
+        entries
             .into_iter()
             .map(parse_entry)
-            .collect::<Result<_, _>>()?;
-        if entries.is_empty() {
-            return Err(SipAcceptEncodingError::Empty);
-        }
-        Ok(Self(entries))
+            .collect::<Result<_, _>>()
+            .map(Self)
     }
 
     /// The parsed entries as a slice.

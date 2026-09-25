@@ -1401,6 +1401,32 @@ mod tests {
         assert_eq!(al.len(), 2);
         assert_eq!(al.entries()[0].language(), "en");
     }
+
+    #[test]
+    fn geolocation_accessor_reads_every_row() {
+        let mut h: HashMap<String, Vec<String>> = HashMap::new();
+        h.insert(
+            "Geolocation".to_string(),
+            vec![
+                "<cid:loc@example.com>".to_string(),
+                "<https://lis.example.com/held/a>;inserted-by=example.org".to_string(),
+            ],
+        );
+        let geo = h
+            .geolocation()
+            .unwrap();
+        assert_eq!(geo.len(), 2);
+        assert_eq!(geo.cid(), Some("loc@example.com"));
+        assert_eq!(geo.url(), Some("https://lis.example.com/held/a"));
+    }
+
+    #[test]
+    fn geolocation_absent() {
+        let h = headers_with(&[]);
+        assert!(h
+            .geolocation()
+            .is_none());
+    }
 }
 
 #[cfg(test)]
@@ -1545,6 +1571,7 @@ mod multi_valued_tests {
         assert!(SipHeader::ResourcePriority.is_multi_valued());
         assert!(SipHeader::AcceptResourcePriority.is_multi_valued());
         assert!(SipHeader::PAssociatedUri.is_multi_valued());
+        assert!(SipHeader::Geolocation.is_multi_valued());
     }
 
     #[test]

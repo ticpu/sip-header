@@ -398,6 +398,17 @@ impl SipHeader {
                 | Self::ServiceRoute
                 // RFC 7044
                 | Self::HistoryInfo
+                // RFC 3326
+                | Self::Reason
+                // RFC 3841
+                | Self::AcceptContact
+                | Self::RejectContact
+                | Self::RequestDisposition
+                // RFC 4412
+                | Self::ResourcePriority
+                | Self::AcceptResourcePriority
+                // RFC 7315
+                | Self::PAssociatedUri
         ) {
             return true;
         }
@@ -618,30 +629,37 @@ pub trait SipHeaderLookup {
     }
 
     /// Parse `Replaces` into a [`SipReplaces`] (RFC 3891 §6.1).
+    ///
+    /// More than one occurrence is `Err`: RFC 3891 §3 has the receiver
+    /// reject such a request with a 400.
     fn replaces(&self) -> Result<Option<SipReplaces>, SipReplacesError> {
-        match self.sip_header(SipHeader::Replaces) {
-            Some(s) => SipReplaces::parse(s).map(Some),
-            None => Ok(None),
-        }
+        single_row(self, SipHeader::Replaces, SipReplacesError::InvalidFormat)?
+            .map(SipReplaces::parse)
+            .transpose()
     }
 
     /// Parse `Join` into a [`SipReplaces`] (RFC 3911 §7.1).
     ///
     /// Join shares the Replaces grammar (`callid;to-tag=x;from-tag=y`), so
-    /// it reuses the same type.
+    /// it reuses the same type. More than one occurrence is `Err` (RFC 3911 §4).
     fn join(&self) -> Result<Option<SipReplaces>, SipReplacesError> {
-        match self.sip_header(SipHeader::Join) {
-            Some(s) => SipReplaces::parse(s).map(Some),
-            None => Ok(None),
-        }
+        single_row(self, SipHeader::Join, SipReplacesError::InvalidFormat)?
+            .map(SipReplaces::parse)
+            .transpose()
     }
 
     /// Parse `Target-Dialog` into a [`SipTargetDialog`] (RFC 4538 §7).
+    ///
+    /// More than one occurrence is `Err`: the RFC 4538 §7 grammar is a single
+    /// value, not a comma list (RFC 3261 §7.3.1).
     fn target_dialog(&self) -> Result<Option<SipTargetDialog>, SipTargetDialogError> {
-        match self.sip_header(SipHeader::TargetDialog) {
-            Some(s) => SipTargetDialog::parse(s).map(Some),
-            None => Ok(None),
-        }
+        single_row(
+            self,
+            SipHeader::TargetDialog,
+            SipTargetDialogError::InvalidFormat,
+        )?
+        .map(SipTargetDialog::parse)
+        .transpose()
     }
 
     /// Parse `Authorization` into a list of [`SipAuthValue`] (RFC 3261 §20.7).
@@ -772,9 +790,30 @@ fn parse_addr_list(rows: Vec<&str>) -> Result<Vec<SipHeaderAddr>, ParseSipHeader
 fn split_trim(rows: Vec<&str>) -> Vec<&str> {
     split_all(rows)
         .map(str::trim)
+        .filter(|s| !s.is_empty())
         .collect()
 }
 
+/// The one occurrence of a header whose grammar admits a single value.
+fn single_row<L, E>(
+    lookup: &L,
+    name: SipHeader,
+    invalid: impl FnOnce(String) -> E,
+) -> Result<Option<&str>, E>
+where
+    L: SipHeaderLookup + ?Sized,
+{
+    match lookup
+        .sip_header_all(name)
+        .as_slice()
+    {
+        [] => Ok(None),
+        [row] => Ok(Some(*row)),
+        _ => Err(invalid(format!("more than one {name} header"))),
+    }
+}
+
+/// Keys are matched exactly, case included.
 impl SipHeaderLookup for std::collections::HashMap<String, String> {
     fn sip_header_str(&self, name: &str) -> Option<&str> {
         self.get(name)
@@ -782,6 +821,7 @@ impl SipHeaderLookup for std::collections::HashMap<String, String> {
     }
 }
 
+/// Keys are matched exactly, case included.
 impl SipHeaderLookup for std::collections::HashMap<String, Vec<String>> {
     fn sip_header_str(&self, name: &str) -> Option<&str> {
         self.get(name)

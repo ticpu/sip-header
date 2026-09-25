@@ -28,18 +28,28 @@ impl std::error::Error for SipAuthError {}
 /// Covers Authorization, Proxy-Authorization, WWW-Authenticate, and
 /// Proxy-Authenticate header field values.
 ///
-/// Grammar: `scheme SP param=val *(COMMA param=val)`
+/// Grammar: `scheme SP param=val *(COMMA param=val)`, or `scheme SP token68`
+/// (RFC 7235 §2.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SipAuthValue {
     scheme: String,
     params: Vec<(String, String)>,
+    quoted: Vec<bool>,
+    token68: Option<String>,
 }
 
 impl SipAuthValue {
     /// Returns the authentication scheme (e.g., "Digest", "Bearer").
     pub fn scheme(&self) -> &str {
         &self.scheme
+    }
+
+    /// Returns the `token68` credential (RFC 7235 §2.1), such as an RFC 8898
+    /// Bearer access token, when the value carries one instead of parameters.
+    pub fn token68(&self) -> Option<&str> {
+        self.token68
+            .as_deref()
     }
 
     /// Returns all authentication parameters as key-value pairs.
@@ -103,27 +113,40 @@ impl SipAuthValue {
         let (scheme, rest) = match s.split_once(|c: char| c.is_ascii_whitespace()) {
             Some((scheme, rest)) => (scheme, rest.trim_start()),
             None => {
-                // No params, just a scheme
                 return Ok(SipAuthValue {
                     scheme: s.to_string(),
                     params: Vec::new(),
+                    quoted: Vec::new(),
+                    token68: None,
                 });
             }
         };
 
-        let mut params = Vec::new();
+        if is_token68(rest) {
+            return Ok(SipAuthValue {
+                scheme: scheme.to_string(),
+                params: Vec::new(),
+                quoted: Vec::new(),
+                token68: Some(rest.to_string()),
+            });
+        }
 
-        for param_str in crate::split_comma_entries(rest) {
+        let mut params = Vec::new();
+        let mut quoted = Vec::new();
+
+        for (i, param_str) in crate::split_comma_entries(rest)
+            .into_iter()
+            .enumerate()
+        {
             let param_str = param_str.trim();
             if param_str.is_empty() {
                 continue;
             }
 
-            // Split on '=' to get key and value
             let (key, value) = param_str
                 .split_once('=')
                 .ok_or_else(|| {
-                    SipAuthError::InvalidFormat(format!("missing '=' in parameter: {}", param_str))
+                    SipAuthError::InvalidFormat(format!("missing '=' in parameter {}", i + 1))
                 })?;
 
             let key = key
@@ -131,32 +154,45 @@ impl SipAuthValue {
                 .to_ascii_lowercase();
             let value = value.trim();
 
-            // Strip quotes and unescape quoted-pair sequences (RFC 3261 §25.1)
-            let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
-                crate::unescape_quoted_pair(&value[1..value.len() - 1])
-            } else {
-                value.to_string()
-            };
+            let (value, was_quoted) =
+                if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                    (
+                        crate::unescape_quoted_pair(&value[1..value.len() - 1]),
+                        true,
+                    )
+                } else {
+                    (value.to_string(), false)
+                };
 
             params.push((key, value));
+            quoted.push(was_quoted);
         }
 
         Ok(SipAuthValue {
             scheme: scheme.to_string(),
             params,
+            quoted,
+            token68: None,
         })
     }
+}
+
+/// `token68 = 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="`
+/// (RFC 7235 §2.1).
+fn is_token68(s: &str) -> bool {
+    let body = s.trim_end_matches('=');
+    !body.is_empty()
+        && body
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-._~+/".contains(&b))
 }
 
 impl_from_str_via_parse!(SipAuthValue, SipAuthError);
 
 /// RFC 2617 §3.2.1/§3.2.2 params that MUST use quoted-string on the wire.
 ///
-/// `qop` is intentionally absent: RFC 2617 §3.2.2 specifies it as unquoted
-/// (`token`) in Authorization, while §3.2.1 quotes it in challenges. Since
-/// `SipAuthValue` serves both roles, we rely on the fallback condition to
-/// quote values containing commas (e.g. `auth,auth-int`) while leaving
-/// simple tokens like `auth` unquoted.
+/// `qop` is absent: a challenge quotes it (§3.2.1) and a credential does not
+/// (§3.2.2), so its quoting follows the form it was parsed from.
 const MUST_QUOTE_PARAMS: &[&str] = &[
     "realm", "domain", "nonce", "opaque", "username", "uri", "response", "cnonce",
 ];
@@ -165,21 +201,27 @@ impl fmt::Display for SipAuthValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.scheme)?;
 
+        if let Some(token68) = &self.token68 {
+            return write!(f, " {token68}");
+        }
+
         if !self
             .params
             .is_empty()
         {
             write!(f, " ")?;
-            for (i, (key, value)) in self
+            for (i, ((key, value), &was_quoted)) in self
                 .params
                 .iter()
+                .zip(&self.quoted)
                 .enumerate()
             {
                 if i > 0 {
                     write!(f, ", ")?;
                 }
 
-                if MUST_QUOTE_PARAMS.contains(&key.as_str())
+                if was_quoted
+                    || MUST_QUOTE_PARAMS.contains(&key.as_str())
                     || value.contains(|c: char| c.is_ascii_whitespace() || c == ',' || c == '"')
                     || value.is_empty()
                 {

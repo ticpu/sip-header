@@ -147,4 +147,61 @@ mod tests {
         assert!(output.contains(r#"entity="sip:alice@example.com""#));
         assert!(output.contains(r#"state="full""#));
     }
+
+    const CI_NS: &str = "urn:ietf:params:xml:ns:conference-info";
+
+    #[test]
+    fn skips_prefixed_foreign_element() {
+        let input = format!(
+            r#"<conference-info xmlns="{CI_NS}" xmlns:ext="urn:example:ext" entity="sip:conf@example.com"><users><user entity="sip:alice@example.com"/><ext:user entity="sip:bob@example.com"><ext:status>x</ext:status></ext:user><ext:user entity="sip:carol@example.com"/></users></conference-info>"#
+        );
+        let output = strip_namespace_prefixes(&input).unwrap();
+        assert!(output.contains("sip:alice@example.com"));
+        assert!(!output.contains("sip:bob@example.com"));
+        assert!(!output.contains("sip:carol@example.com"));
+        assert!(!output.contains("<status>"));
+        assert!(output.ends_with("</users></conference-info>"));
+    }
+
+    #[test]
+    fn skips_default_namespace_foreign_element() {
+        let input = format!(
+            r#"<ci:conference-info xmlns:ci="{CI_NS}" entity="sip:conf@example.com"><ci:users><ci:user entity="sip:alice@example.com"/><user xmlns="urn:example:ext" entity="sip:bob@example.com"><display-text>x</display-text></user></ci:users></ci:conference-info>"#
+        );
+        let output = strip_namespace_prefixes(&input).unwrap();
+        assert!(output.contains("sip:alice@example.com"));
+        assert!(!output.contains("sip:bob@example.com"));
+        assert!(!output.contains("<display-text>"));
+    }
+
+    #[test]
+    fn foreign_user_not_parsed_as_user() {
+        let input = format!(
+            r#"<conference-info xmlns="{CI_NS}" xmlns:ext="urn:example:ext" entity="sip:conf@example.com" state="full" version="1"><users><user entity="sip:alice@example.com"/><ext:user entity="sip:bob@example.com"/><user xmlns="urn:example:ext" entity="sip:carol@example.com"/></users></conference-info>"#
+        );
+        let doc = super::super::ConferenceInfo::from_xml(&input).unwrap();
+        let users = &doc
+            .users
+            .unwrap()
+            .users;
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].entity, "sip:alice@example.com");
+    }
+
+    #[test]
+    fn keeps_undeclared_prefix() {
+        let input = r#"<conference-info entity="sip:conf@example.com"><users><x:user entity="sip:alice@example.com"/></users></conference-info>"#;
+        let output = strip_namespace_prefixes(input).unwrap();
+        assert!(output.contains(r#"<user entity="sip:alice@example.com"/>"#));
+    }
+
+    #[test]
+    fn keeps_root_in_unexpected_namespace() {
+        let input = r#"<conference-info xmlns="urn:example:other" entity="sip:conf@example.com"><users><user entity="sip:alice@example.com"/></users></conference-info>"#;
+        let output = strip_namespace_prefixes(input).unwrap();
+        assert_eq!(
+            output,
+            r#"<conference-info entity="sip:conf@example.com"><users><user entity="sip:alice@example.com"/></users></conference-info>"#
+        );
+    }
 }

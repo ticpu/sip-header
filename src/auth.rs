@@ -449,14 +449,22 @@ mod tests {
     }
 
     #[test]
-    fn qop_unquoted_in_display() {
+    fn challenge_qop_stays_quoted() {
         let input = r#"Digest realm="example.com", qop="auth""#;
         let auth: SipAuthValue = input
             .parse()
             .unwrap();
-        let output = auth.to_string();
-        assert!(output.contains("qop=auth"));
-        assert!(!output.contains("qop=\"auth\""));
+        assert_eq!(auth.qop(), Some("auth"));
+        assert_eq!(auth.to_string(), input);
+    }
+
+    #[test]
+    fn credential_qop_stays_unquoted() {
+        let input = r#"Digest username="alice", realm="example.com", qop=auth, nc=00000001"#;
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        assert_eq!(auth.to_string(), input);
     }
 
     #[test]
@@ -467,5 +475,73 @@ mod tests {
             .unwrap();
         let output = auth.to_string();
         assert!(output.contains(r#"qop="auth,auth-int""#));
+    }
+
+    #[test]
+    fn bearer_token68() {
+        let input = "Bearer mF_9.B5f-4.1JqM";
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        assert_eq!(auth.scheme(), "Bearer");
+        assert_eq!(auth.token68(), Some("mF_9.B5f-4.1JqM"));
+        assert!(auth
+            .params()
+            .is_empty());
+        assert_eq!(auth.to_string(), input);
+    }
+
+    #[test]
+    fn bearer_token68_with_padding() {
+        let input = "Bearer abc==";
+        let auth: SipAuthValue = input
+            .parse()
+            .unwrap();
+        assert_eq!(auth.token68(), Some("abc=="));
+        assert!(auth
+            .params()
+            .is_empty());
+        assert_eq!(auth.to_string(), input);
+    }
+
+    #[test]
+    fn token68_charset() {
+        let auth: SipAuthValue = "Bearer a-._~+/Z9="
+            .parse()
+            .unwrap();
+        assert_eq!(auth.token68(), Some("a-._~+/Z9="));
+    }
+
+    #[test]
+    fn auth_params_are_not_token68() {
+        let auth: SipAuthValue = r#"Digest realm="x""#
+            .parse()
+            .unwrap();
+        assert_eq!(auth.token68(), None);
+        assert_eq!(auth.realm(), Some("x"));
+
+        let auth: SipAuthValue = "Bearer token=abc123"
+            .parse()
+            .unwrap();
+        assert_eq!(auth.token68(), None);
+        assert_eq!(auth.param("token"), Some("abc123"));
+    }
+
+    #[test]
+    fn scheme_only_has_no_token68() {
+        let auth: SipAuthValue = "Bearer"
+            .parse()
+            .unwrap();
+        assert_eq!(auth.token68(), None);
+    }
+
+    #[test]
+    fn error_display_omits_param_bytes() {
+        let err = "Digest username=alice, secretvalue"
+            .parse::<SipAuthValue>()
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(!msg.contains("secretvalue"));
+        assert!(msg.contains('2'));
     }
 }

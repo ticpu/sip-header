@@ -266,20 +266,19 @@ fn extract_angle_uri(s: &str) -> Option<(&str, &str)> {
 }
 
 /// Parse header-level parameters from the trailing portion after `>`.
-/// Values are stored as raw percent-encoded strings for round-trip fidelity.
+/// Keys are lowercased; values stay raw (quotes and percent-encoding intact).
 fn parse_header_params(s: &str) -> Vec<(String, Option<String>)> {
-    let mut params = Vec::new();
-    for segment in s.split(';') {
-        if segment.is_empty() {
-            continue;
-        }
-        if let Some((key, value)) = segment.split_once('=') {
-            params.push((key.to_ascii_lowercase(), Some(value.to_string())));
-        } else {
-            params.push((segment.to_ascii_lowercase(), None));
-        }
-    }
-    params
+    crate::parse_params(s)
+        .into_iter()
+        .map(|p| {
+            (
+                p.key
+                    .to_ascii_lowercase(),
+                p.value
+                    .map(str::to_string),
+            )
+        })
+        .collect()
 }
 
 /// Check if a display name needs quoting (contains SIP special chars or whitespace).
@@ -398,10 +397,7 @@ impl fmt::Display for SipHeaderAddr {
             }
         }
         for (key, value) in &self.params {
-            match value {
-                Some(v) => write!(f, ";{key}={v}")?,
-                None => write!(f, ";{key}")?,
-            }
+            crate::write_param(f, key, value.as_deref(), false)?;
         }
         Ok(())
     }
